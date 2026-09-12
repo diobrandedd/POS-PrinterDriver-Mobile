@@ -62,6 +62,22 @@ class RtsClient {
       body: {'pin': pin},
       auth: false,
     );
+    return _acceptToken(data);
+  }
+
+  /// Staff assigned in RTS Settings → Mobile POS staff.
+  Future<Map<String, dynamic>> posStaffLogin(String username, String password) async {
+    final data = await _request(
+      'POST',
+      'auth.php',
+      action: 'pos_staff_login',
+      body: {'username': username.trim(), 'password': password},
+      auth: false,
+    );
+    return _acceptToken(data);
+  }
+
+  Future<Map<String, dynamic>> _acceptToken(Map<String, dynamic> data) async {
     final token = data['token'] as String?;
     if (token == null || token.isEmpty) {
       throw RtsException(data['token_error'] as String? ?? 'Server did not issue a mobile token.');

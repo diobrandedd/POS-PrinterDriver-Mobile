@@ -208,12 +208,18 @@ class SaleReceiptItem {
     required this.qty,
     required this.unitPrice,
     required this.lineTotal,
+    this.variant,
+    this.size,
+    this.sizeLabel,
   });
 
   final String name;
   final double qty;
   final double unitPrice;
   final double lineTotal;
+  final String? variant;
+  final String? size;
+  final String? sizeLabel;
 
   factory SaleReceiptItem.fromMap(Map<dynamic, dynamic> map) {
     final label = map['label'] as String? ??
@@ -225,6 +231,9 @@ class SaleReceiptItem {
       qty: (map['qty'] as num?)?.toDouble() ?? 1,
       unitPrice: (map['unit_price'] as num?)?.toDouble() ?? 0,
       lineTotal: (map['line_total'] as num?)?.toDouble() ?? 0,
+      variant: map['variant'] as String?,
+      size: map['size'] as String?,
+      sizeLabel: map['size_label'] as String?,
     );
   }
 }
