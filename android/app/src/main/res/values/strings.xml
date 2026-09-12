@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Thermal Print</string>
+    <string name="print_service_label">Thermal Print</string>
+</resources>
