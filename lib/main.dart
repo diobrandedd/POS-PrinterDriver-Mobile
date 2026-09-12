@@ -1,72 +1,154 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:thermal_print/src/api/rts_client.dart';
+import 'package:thermal_print/src/api/rts_models.dart';
+import 'package:thermal_print/src/pos/receipt_formatter.dart';
 import 'package:thermal_print/src/print_bridge.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ThermalPrintApp());
+  await RtsClient.instance.init();
+  runApp(const ThermalPosApp());
 }
 
-class ThermalPrintApp extends StatelessWidget {
-  const ThermalPrintApp({super.key});
+class ThermalPosApp extends StatelessWidget {
+  const ThermalPosApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final base = ColorScheme.fromSeed(
+    final scheme = ColorScheme.fromSeed(
       seedColor: const Color(0xFF1F6F4A),
       brightness: Brightness.light,
     );
     return MaterialApp(
-      title: 'Thermal Print',
+      title: 'POS Thermal',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: base,
-        useMaterial3: true,
-        appBarTheme: AppBarTheme(
-          backgroundColor: base.surface,
-          foregroundColor: base.onSurface,
-          elevation: 0,
-        ),
-      ),
-      home: const HomeShell(),
+      theme: ThemeData(colorScheme: scheme, useMaterial3: true),
+      home: RtsClient.instance.isLoggedIn ? const PosShell() : const LoginPage(),
     );
   }
 }
 
-class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
-
-  @override
-  State<HomeShell> createState() => _HomeShellState();
+Future<void> printReceipt(SaleReceipt receipt) async {
+  await PrintBridge.instance.printText(formatSaleReceiptText(receipt));
 }
 
-class _HomeShellState extends State<HomeShell> {
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _pin = TextEditingController();
+  final _api = TextEditingController(text: RtsClient.instance.baseUrl);
+  bool _busy = false;
+  String? _error;
+  bool _showApi = false;
+
+  @override
+  void dispose() {
+    _pin.dispose();
+    _api.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await RtsClient.instance.setBaseUrl(_api.text);
+      await RtsClient.instance.posLogin(_pin.text.trim());
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const PosShell()),
+      );
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            const SizedBox(height: 32),
+            Text('POS Terminal', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text('Sign in with POS PIN. Sales sync to RTS / Pyx Tracker.',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 28),
+            TextField(
+              controller: _pin,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'POS PIN',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _busy ? null : _login(),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => setState(() => _showApi = !_showApi),
+              child: Text(_showApi ? 'Hide API settings' : 'API settings'),
+            ),
+            if (_showApi) ...[
+              TextField(
+                controller: _api,
+                decoration: const InputDecoration(
+                  labelText: 'API base URL',
+                  border: OutlineInputBorder(),
+                  helperText: 'Default: https://pyxtracker.pyxfood.com/rts/api/v1',
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_error != null) ...[
+              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              const SizedBox(height: 12),
+            ],
+            FilledButton(
+              onPressed: _busy ? null : _login,
+              child: _busy
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Enter POS'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class PosShell extends StatefulWidget {
+  const PosShell({super.key});
+
+  @override
+  State<PosShell> createState() => _PosShellState();
+}
+
+class _PosShellState extends State<PosShell> {
   int _index = 0;
   PrinterProfile _profile = const PrinterProfile();
   bool _connected = false;
-  bool _busy = false;
-  String? _statusMessage;
-  StreamSubscription<IncomingPrint>? _incomingSub;
-  IncomingPrint? _pending;
 
   @override
   void initState() {
     super.initState();
-    _refresh();
-    _incomingSub = PrintBridge.instance.incoming.listen(_onIncoming);
+    _refreshPrinter();
   }
 
-  @override
-  void dispose() {
-    _incomingSub?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _refresh() async {
+  Future<void> _refreshPrinter() async {
     try {
       final profile = await PrintBridge.instance.getProfile();
       final status = await PrintBridge.instance.getStatus();
@@ -75,148 +157,41 @@ class _HomeShellState extends State<HomeShell> {
         _profile = profile;
         _connected = status['connected'] == true;
       });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _statusMessage = e.toString());
-    }
+    } catch (_) {}
   }
 
-  Future<bool> _ensurePermissions() async {
-    final statuses = await [
-      Permission.bluetoothConnect,
-      Permission.bluetoothScan,
-      Permission.locationWhenInUse,
-    ].request();
-    final denied = statuses.values.any(
-      (s) => s.isDenied || s.isPermanentlyDenied || s.isRestricted,
-    );
-    return !denied || await Permission.bluetoothConnect.isGranted;
-  }
-
-  Future<void> _run(Future<void> Function() action, {String? okMessage}) async {
-    setState(() {
-      _busy = true;
-      _statusMessage = null;
-    });
-    try {
-      await _ensurePermissions();
-      await action();
-      await _refresh();
-      if (!mounted) return;
-      setState(() => _statusMessage = okMessage ?? 'Done');
-    } on PlatformException catch (e) {
-      if (!mounted) return;
-      setState(() => _statusMessage = e.message ?? e.code);
-      _snack(e.message ?? e.code);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _statusMessage = e.toString());
-      _snack(e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _snack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _onIncoming(IncomingPrint job) async {
-    if (job.autoPrint) {
-      await _printIncoming(job);
-      return;
-    }
+  Future<void> _logout() async {
+    await RtsClient.instance.logout();
     if (!mounted) return;
-    setState(() {
-      _pending = job;
-      _index = 3;
-    });
-  }
-
-  Future<void> _printIncoming(IncomingPrint job) async {
-    await _run(() async {
-      switch (job.kind) {
-        case 'text':
-          await PrintBridge.instance.printText(job.text ?? '');
-        case 'textUri':
-        case 'image':
-        case 'pdf':
-        case 'uri':
-          if (job.uri == null) throw Exception('Missing content URI');
-          await PrintBridge.instance.printUri(job.uri!, mimeType: job.mimeType);
-        case 'imageBytes':
-          if (job.bytes == null) throw Exception('Missing image bytes');
-          await PrintBridge.instance.printImage(job.bytes!);
-        case 'pdfBytes':
-          if (job.bytes == null) throw Exception('Missing PDF bytes');
-          await PrintBridge.instance.printPdf(job.bytes!);
-        case 'raw':
-          if (job.base64 == null) throw Exception('Missing raw data');
-          await PrintBridge.instance.printBase64(job.base64!);
-        default:
-          if (job.text != null) {
-            await PrintBridge.instance.printText(job.text!);
-          } else if (job.uri != null) {
-            await PrintBridge.instance.printUri(job.uri!, mimeType: job.mimeType);
-          } else {
-            throw Exception('Unsupported share payload');
-          }
-      }
-      if (mounted) setState(() => _pending = null);
-    }, okMessage: 'Printed ${job.previewLabel}');
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _HomePage(
+      SellPage(onPrinted: () => _snack('Receipt printed')),
+      ArPage(onPrinted: () => _snack('AR receipt printed')),
+      HistoryPage(onMessage: _snack),
+      PrinterHub(
         profile: _profile,
         connected: _connected,
-        busy: _busy,
-        statusMessage: _statusMessage,
-        onRefresh: _refresh,
-        onConnect: () => _run(() async {
-          await PrintBridge.instance.connect(_profile);
-        }, okMessage: 'Connected'),
-        onDisconnect: () => _run(() async {
-          await PrintBridge.instance.disconnect();
-        }, okMessage: 'Disconnected'),
-        onTestPrint: () => _run(() async {
-          await PrintBridge.instance.printTest();
-        }, okMessage: 'Test print sent'),
-        onOpenPrinters: () => setState(() => _index = 1),
-      ),
-      PrintersPage(
-        profile: _profile,
-        busy: _busy,
-        onChanged: (p) async {
+        onProfileChanged: (p) async {
           setState(() => _profile = p);
           await PrintBridge.instance.saveProfile(p);
-          await _refresh();
+          await _refreshPrinter();
         },
-        onConnect: (p) => _run(() async {
-          setState(() => _profile = p);
-          await PrintBridge.instance.connect(p);
-        }, okMessage: 'Connected to printer'),
-        ensurePermissions: _ensurePermissions,
+        onRefresh: _refreshPrinter,
       ),
       SettingsPage(
         profile: _profile,
-        onSave: (p) async {
+        onSaveProfile: (p) async {
           setState(() => _profile = p);
           await PrintBridge.instance.saveProfile(p);
-          _snack('Settings saved');
-          await _refresh();
+          _snack('Printer settings saved');
         },
-      ),
-      PreviewPage(
-        pending: _pending,
-        busy: _busy,
-        onPrint: _pending == null ? null : () => _printIncoming(_pending!),
-        onClear: () => setState(() => _pending = null),
-        onPrintText: (text) => _run(() async {
-          await PrintBridge.instance.printText(text);
-        }, okMessage: 'Printed text'),
+        onLogout: _logout,
       ),
     ];
 
@@ -226,262 +201,695 @@ class _HomeShellState extends State<HomeShell> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.print_outlined), selectedIcon: Icon(Icons.print), label: 'Printers'),
-          NavigationDestination(icon: Icon(Icons.tune_outlined), selectedIcon: Icon(Icons.tune), label: 'Settings'),
-          NavigationDestination(icon: Icon(Icons.preview_outlined), selectedIcon: Icon(Icons.preview), label: 'Preview'),
+          NavigationDestination(icon: Icon(Icons.point_of_sale_outlined), selectedIcon: Icon(Icons.point_of_sale), label: 'Sell'),
+          NavigationDestination(icon: Icon(Icons.credit_score_outlined), selectedIcon: Icon(Icons.credit_score), label: 'AR'),
+          NavigationDestination(icon: Icon(Icons.history), label: 'History'),
+          NavigationDestination(icon: Icon(Icons.print_outlined), selectedIcon: Icon(Icons.print), label: 'Printer'),
+          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );
   }
-}
 
-class _HomePage extends StatelessWidget {
-  const _HomePage({
-    required this.profile,
-    required this.connected,
-    required this.busy,
-    required this.statusMessage,
-    required this.onRefresh,
-    required this.onConnect,
-    required this.onDisconnect,
-    required this.onTestPrint,
-    required this.onOpenPrinters,
-  });
-
-  final PrinterProfile profile;
-  final bool connected;
-  final bool busy;
-  final String? statusMessage;
-  final VoidCallback onRefresh;
-  final VoidCallback onConnect;
-  final VoidCallback onDisconnect;
-  final VoidCallback onTestPrint;
-  final VoidCallback onOpenPrinters;
-
-  @override
-  Widget build(BuildContext context) {
-    final name = profile.displayName.isNotEmpty
-        ? profile.displayName
-        : (profile.address.isNotEmpty ? profile.address : 'No printer selected');
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Thermal Print',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
-              ),
-            ),
-            IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Personal ESC/POS driver — no watermark',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 20),
-        Card(
-          elevation: 0,
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      connected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-                      color: connected
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.outline,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      connected ? 'Connected' : 'Not connected',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(name),
-                const SizedBox(height: 4),
-                Text(
-                  '${profile.transport.toUpperCase()} · ${profile.paperWidthMm}mm · ${profile.graphicsCommand}',
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: busy ? null : onTestPrint,
-          icon: const Icon(Icons.receipt_long),
-          label: const Text('Test print'),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: busy ? null : onConnect,
-                child: const Text('Connect'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: busy ? null : onDisconnect,
-                child: const Text('Disconnect'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        TextButton(
-          onPressed: onOpenPrinters,
-          child: const Text('Choose Bluetooth / USB / Network printer'),
-        ),
-        if (busy) ...[
-          const SizedBox(height: 16),
-          const LinearProgressIndicator(),
-        ],
-        if (statusMessage != null) ...[
-          const SizedBox(height: 16),
-          Text(statusMessage!),
-        ],
-        const SizedBox(height: 24),
-        Text(
-          'Tips',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        const Text('1. Pair your KJ-5802H (or any ESC/POS printer) in Android Bluetooth settings.'),
-        const Text('2. Select it under Printers, then tap Test print.'),
-        const Text('3. Enable Thermal Print in Settings → Connected devices → Printing.'),
-        const Text('4. Share images/PDFs/text to this app, or use thermalprint: URIs.'),
-      ],
-    );
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 }
 
-class PrintersPage extends StatefulWidget {
-  const PrintersPage({
-    super.key,
-    required this.profile,
-    required this.busy,
-    required this.onChanged,
-    required this.onConnect,
-    required this.ensurePermissions,
-  });
-
-  final PrinterProfile profile;
-  final bool busy;
-  final ValueChanged<PrinterProfile> onChanged;
-  final ValueChanged<PrinterProfile> onConnect;
-  final Future<bool> Function() ensurePermissions;
+class SellPage extends StatefulWidget {
+  const SellPage({super.key, required this.onPrinted});
+  final VoidCallback onPrinted;
 
   @override
-  State<PrintersPage> createState() => _PrintersPageState();
+  State<SellPage> createState() => _SellPageState();
 }
 
-class _PrintersPageState extends State<PrintersPage> {
-  late String _transport = widget.profile.transport;
-  List<BtDevice> _bt = [];
-  List<UsbDeviceInfo> _usb = [];
-  final _hostCtrl = TextEditingController();
-  final _portCtrl = TextEditingController(text: '9100');
+class _SellPageState extends State<SellPage> {
+  final _scan = TextEditingController();
+  final _buyer = TextEditingController();
+  final _seller = TextEditingController();
+  final _lines = <CartLine>[];
+  bool _busy = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _hostCtrl.text = widget.profile.transport == 'tcp' ? widget.profile.address : '';
-    _portCtrl.text = '${widget.profile.tcpPort}';
-    _reload();
-  }
-
-  @override
-  void didUpdateWidget(covariant PrintersPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.profile != widget.profile) {
-      _transport = widget.profile.transport;
-    }
+    RtsClient.instance.getDefaultSeller().then((s) {
+      if (mounted && _seller.text.isEmpty) _seller.text = s;
+    });
   }
 
   @override
   void dispose() {
-    _hostCtrl.dispose();
-    _portCtrl.dispose();
+    _scan.dispose();
+    _buyer.dispose();
+    _seller.dispose();
     super.dispose();
   }
 
-  Future<void> _reload() async {
-    setState(() => _error = null);
+  double get _total => _lines.fold(0.0, (a, b) => a + b.lineTotal);
+
+  Future<void> _addCode() async {
+    final code = _scan.text.trim();
+    if (code.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
-      await widget.ensurePermissions();
-      final bt = await PrintBridge.instance.listBluetoothDevices();
-      final usb = await PrintBridge.instance.listUsbDevices();
-      if (!mounted) return;
-      setState(() {
-        _bt = bt;
-        _usb = usb;
-      });
+      final item = await RtsClient.instance.unifiedLookup(code);
+      if (item.lookupKind == 'unique_honey' || item.lookupKind == 'unique_dept') {
+        final exists = _lines.any((l) => l.lookup.unitId != null && l.lookup.unitId == item.unitId);
+        if (exists) throw RtsException('That unit is already in the cart.');
+        _lines.add(CartLine(lookup: item, qty: 1, unitPrice: item.suggestedPrice));
+      } else {
+        final idx = _lines.indexWhere((l) =>
+            l.lookup.productId == item.productId &&
+            l.lookup.lookupKind == item.lookupKind &&
+            l.lookup.code == item.code);
+        if (idx >= 0) {
+          _lines[idx].qty += 1;
+        } else {
+          _lines.add(CartLine(lookup: item, qty: 1, unitPrice: item.suggestedPrice));
+        }
+      }
+      _scan.clear();
     } catch (e) {
-      if (!mounted) return;
       setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _checkout() async {
+    if (_lines.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await RtsClient.instance.setDefaultSeller(_seller.text);
+      final items = _lines
+          .map((l) => l.lookup.toCheckoutLine(qty: l.qty, listUnitPrice: l.unitPrice))
+          .toList();
+      final receipt = await RtsClient.instance.unifiedCheckout(
+        buyerName: _buyer.text.trim(),
+        sellerName: _seller.text.trim(),
+        items: items,
+      );
+      try {
+        await printReceipt(receipt);
+        widget.onPrinted();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Sale saved, but print failed: $e')),
+          );
+        }
+      }
+      setState(() {
+        _lines.clear();
+        _buyer.clear();
+      });
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Sale complete'),
+            content: Text('${receipt.receiptNo}\nTotal PHP ${receipt.total.toStringAsFixed(2)}'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
-        const Text('Printers', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+        const Text('Sell', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
+        TextField(
+          controller: _scan,
+          decoration: InputDecoration(
+            labelText: 'Scan / type barcode',
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(onPressed: _busy ? null : _addCode, icon: const Icon(Icons.add)),
+          ),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _addCode(),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _buyer,
+          decoration: const InputDecoration(labelText: 'Customer name', border: OutlineInputBorder()),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _seller,
+          decoration: const InputDecoration(labelText: 'Seller name', border: OutlineInputBorder()),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 12),
+        if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ..._lines.asMap().entries.map((e) {
+          final i = e.key;
+          final line = e.value;
+          return ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(line.title),
+            subtitle: Text('PHP ${line.unitPrice.toStringAsFixed(2)}'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (line.lookup.requiresQty || line.lookup.lookupKind == 'sku')
+                  IconButton(
+                    onPressed: () => setState(() {
+                      if (line.qty > 1) {
+                        line.qty -= 1;
+                      } else {
+                        _lines.removeAt(i);
+                      }
+                    }),
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                Text('${line.qty}'),
+                if (line.lookup.requiresQty || line.lookup.lookupKind == 'sku')
+                  IconButton(
+                    onPressed: () => setState(() => line.qty += 1),
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                IconButton(
+                  onPressed: () => setState(() => _lines.removeAt(i)),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ),
+          );
+        }),
+        const Divider(),
+        Text('Total: PHP ${_total.toStringAsFixed(2)}',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _busy || _lines.isEmpty || _buyer.text.trim().isEmpty || _seller.text.trim().isEmpty
+              ? null
+              : _checkout,
+          icon: const Icon(Icons.payments),
+          label: Text(_busy ? 'Processing…' : 'Cash checkout & print'),
+        ),
+      ],
+    );
+  }
+}
+
+class ArPage extends StatefulWidget {
+  const ArPage({super.key, required this.onPrinted});
+  final VoidCallback onPrinted;
+
+  @override
+  State<ArPage> createState() => _ArPageState();
+}
+
+class _ArPageState extends State<ArPage> {
+  final _scan = TextEditingController();
+  final _debtor = TextEditingController();
+  final _mobile = TextEditingController();
+  final _seller = TextEditingController();
+  final _lines = <CartLine>[];
+  List<StaffMember> _staff = [];
+  StaffMember? _selected;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    RtsClient.instance.getDefaultSeller().then((s) {
+      if (mounted && _seller.text.isEmpty) _seller.text = s;
+    });
+    _loadStaff();
+  }
+
+  Future<void> _loadStaff() async {
+    try {
+      final staff = await RtsClient.instance.staffPicker();
+      if (mounted) setState(() => _staff = staff);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _scan.dispose();
+    _debtor.dispose();
+    _mobile.dispose();
+    _seller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addCode() async {
+    final code = _scan.text.trim();
+    if (code.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final item = await RtsClient.instance.unifiedLookup(code);
+      _lines.add(CartLine(lookup: item, qty: 1, unitPrice: item.suggestedPrice));
+      _scan.clear();
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _checkout() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final name = _selected?.name ?? _debtor.text.trim();
+      final items = _lines
+          .map((l) => l.lookup.toCheckoutLine(qty: l.qty, listUnitPrice: l.unitPrice))
+          .toList();
+      final receipt = await RtsClient.instance.unifiedArCheckout(
+        debtorName: name,
+        sellerName: _seller.text.trim(),
+        items: items,
+        debtorUserId: _selected?.id,
+        debtorMobile: _mobile.text.trim(),
+      );
+      try {
+        await printReceipt(receipt);
+        widget.onPrinted();
+      } catch (_) {}
+      setState(() {
+        _lines.clear();
+        _debtor.clear();
+        _mobile.clear();
+        _selected = null;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('AR saved: ${receipt.receiptNo}')),
+        );
+      }
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final debtorOk = (_selected != null) || _debtor.text.trim().isNotEmpty;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        const Text('AR Credit', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 12),
+        DropdownMenu<int?>(
+          initialSelection: _selected?.id,
+          label: const Text('Staff debtor'),
+          dropdownMenuEntries: [
+            const DropdownMenuEntry(value: null, label: '— Manual name —'),
+            ..._staff.map((s) => DropdownMenuEntry(
+                  value: s.id,
+                  label: '${s.name}${s.deptName != null ? ' (${s.deptName})' : ''}',
+                )),
+          ],
+          onSelected: (id) => setState(() {
+            if (id == null) {
+              _selected = null;
+            } else {
+              _selected = _staff.firstWhere((s) => s.id == id);
+              _debtor.text = _selected!.name;
+            }
+          }),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _debtor,
+          decoration: const InputDecoration(labelText: 'Debtor name', border: OutlineInputBorder()),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _mobile,
+          decoration: const InputDecoration(labelText: 'Mobile (optional)', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _seller,
+          decoration: const InputDecoration(labelText: 'Seller name', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _scan,
+          decoration: InputDecoration(
+            labelText: 'Scan item',
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(onPressed: _busy ? null : _addCode, icon: const Icon(Icons.add)),
+          ),
+          onSubmitted: (_) => _addCode(),
+        ),
+        if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ..._lines.map((l) => ListTile(
+              title: Text(l.title),
+              trailing: Text('PHP ${l.lineTotal.toStringAsFixed(2)}'),
+            )),
+        FilledButton(
+          onPressed: _busy || _lines.isEmpty || !debtorOk || _seller.text.trim().isEmpty ? null : _checkout,
+          child: const Text('AR checkout & print'),
+        ),
+      ],
+    );
+  }
+}
+
+class HistoryPage extends StatefulWidget {
+  const HistoryPage({super.key, required this.onMessage});
+  final ValueChanged<String> onMessage;
+
+  @override
+  State<HistoryPage> createState() => _HistoryPageState();
+}
+
+class _HistoryPageState extends State<HistoryPage> {
+  List<SaleReceipt> _rows = [];
+  bool _busy = false;
+  String? _error;
+  String _period = 'day';
+  final _search = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final data = await RtsClient.instance.salesHistory(
+        period: _period,
+        receipt: _search.text.trim().isEmpty ? null : _search.text.trim(),
+      );
+      final checkouts = data['checkouts'] as Map? ?? {};
+      final rows = (checkouts['rows'] as List?) ?? const [];
+      setState(() {
+        _rows = rows
+            .map((e) => SaleReceipt.fromHistoryRow(Map<dynamic, dynamic>.from(e as Map)))
+            .toList();
+      });
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _reprint(SaleReceipt row) async {
+    try {
+      final full = await RtsClient.instance.receiptGet(row.saleId);
+      await printReceipt(full);
+      widget.onMessage('Reprinted ${full.receiptNo}');
+    } catch (e) {
+      widget.onMessage(e.toString());
+    }
+  }
+
+  Future<void> _refund(SaleReceipt row) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Refund sale?'),
+        content: Text('Fully refund ${row.receiptNo}? Stock will be restocked and RTS will update.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Refund')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await RtsClient.instance.saleRefund(row.saleId, reason: 'Mobile POS refund');
+      widget.onMessage('Refunded ${row.receiptNo}');
+      await _load();
+    } catch (e) {
+      widget.onMessage(e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Sales history', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'day', label: Text('Day')),
+                  ButtonSegment(value: 'week', label: Text('Week')),
+                  ButtonSegment(value: 'month', label: Text('Month')),
+                  ButtonSegment(value: 'all', label: Text('All')),
+                ],
+                selected: {_period},
+                onSelectionChanged: (s) {
+                  setState(() => _period = s.first);
+                  _load();
+                },
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _search,
+                decoration: InputDecoration(
+                  labelText: 'Search receipt',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(onPressed: _load, icon: const Icon(Icons.search)),
+                ),
+                onSubmitted: (_) => _load(),
+              ),
+            ],
+          ),
+        ),
+        if (_busy) const LinearProgressIndicator(),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: _rows.length,
+              itemBuilder: (context, i) {
+                final row = _rows[i];
+                return Card(
+                  child: ListTile(
+                    title: Text(row.receiptNo),
+                    subtitle: Text(
+                      '${row.buyerName}\n${row.soldAt ?? ''}\nPHP ${row.total.toStringAsFixed(2)}'
+                      '${row.isAr ? ' · AR' : ''}${row.refunded ? ' · REFUNDED' : ''}',
+                    ),
+                    isThreeLine: true,
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (v) {
+                        if (v == 'reprint') _reprint(row);
+                        if (v == 'refund') _refund(row);
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(value: 'reprint', child: Text('Reprint')),
+                        if (!row.refunded)
+                          const PopupMenuItem(value: 'refund', child: Text('Refund')),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class PrinterHub extends StatefulWidget {
+  const PrinterHub({
+    super.key,
+    required this.profile,
+    required this.connected,
+    required this.onProfileChanged,
+    required this.onRefresh,
+  });
+
+  final PrinterProfile profile;
+  final bool connected;
+  final ValueChanged<PrinterProfile> onProfileChanged;
+  final Future<void> Function() onRefresh;
+
+  @override
+  State<PrinterHub> createState() => _PrinterHubState();
+}
+
+class _PrinterHubState extends State<PrinterHub> {
+  String _transport = 'bluetooth';
+  List<BtDevice> _bt = [];
+  List<UsbDeviceInfo> _usb = [];
+  final _host = TextEditingController();
+  final _port = TextEditingController(text: '9100');
+  bool _busy = false;
+  String? _msg;
+
+  @override
+  void initState() {
+    super.initState();
+    _transport = widget.profile.transport;
+    if (widget.profile.transport == 'tcp') {
+      _host.text = widget.profile.address;
+      _port.text = '${widget.profile.tcpPort}';
+    }
+    _reload();
+  }
+
+  Future<void> _ensurePerms() async {
+    await [
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+      Permission.locationWhenInUse,
+    ].request();
+  }
+
+  Future<void> _reload() async {
+    try {
+      await _ensurePerms();
+      final bt = await PrintBridge.instance.listBluetoothDevices();
+      final usb = await PrintBridge.instance.listUsbDevices();
+      if (mounted) {
+        setState(() {
+          _bt = bt;
+          _usb = usb;
+        });
+      }
+    } catch (e) {
+      setState(() => _msg = e.toString());
+    }
+  }
+
+  Future<void> _run(Future<void> Function() fn, String ok) async {
+    setState(() {
+      _busy = true;
+      _msg = null;
+    });
+    try {
+      await _ensurePerms();
+      await fn();
+      await widget.onRefresh();
+      setState(() => _msg = ok);
+    } on PlatformException catch (e) {
+      setState(() => _msg = e.message ?? e.code);
+    } catch (e) {
+      setState(() => _msg = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _host.dispose();
+    _port.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        const Text('Printer', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+        Text(widget.connected ? 'Connected' : 'Not connected'),
+        Text(widget.profile.displayName.isNotEmpty
+            ? widget.profile.displayName
+            : (widget.profile.address.isNotEmpty ? widget.profile.address : 'No printer')),
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: _busy
+              ? null
+              : () => _run(() => PrintBridge.instance.printTest(), 'Test print sent'),
+          child: const Text('Test print'),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _busy
+                    ? null
+                    : () => _run(() => PrintBridge.instance.connect(widget.profile), 'Connected'),
+                child: const Text('Connect'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _busy
+                    ? null
+                    : () => _run(() async {
+                          await PrintBridge.instance.disconnect();
+                        }, 'Disconnected'),
+                child: const Text('Disconnect'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
         SegmentedButton<String>(
           segments: const [
-            ButtonSegment(value: 'bluetooth', label: Text('Bluetooth'), icon: Icon(Icons.bluetooth)),
-            ButtonSegment(value: 'usb', label: Text('USB'), icon: Icon(Icons.usb)),
-            ButtonSegment(value: 'tcp', label: Text('Wi‑Fi'), icon: Icon(Icons.wifi)),
+            ButtonSegment(value: 'bluetooth', label: Text('BT')),
+            ButtonSegment(value: 'usb', label: Text('USB')),
+            ButtonSegment(value: 'tcp', label: Text('Wi‑Fi')),
           ],
           selected: {_transport},
           onSelectionChanged: (s) => setState(() => _transport = s.first),
         ),
-        const SizedBox(height: 12),
-        if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
         if (_transport == 'bluetooth') ...[
-          Row(
-            children: [
-              const Expanded(child: Text('Paired Bluetooth devices')),
-              IconButton(onPressed: _reload, icon: const Icon(Icons.refresh)),
-            ],
-          ),
-          if (_bt.isEmpty)
-            const Text('No bonded devices. Pair the printer in Android Settings first.')
-          else
-            ..._bt.map((d) {
-              final selected = widget.profile.address == d.address && widget.profile.transport == 'bluetooth';
-              return ListTile(
-                leading: Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off),
+          ..._bt.map((d) => ListTile(
                 title: Text(d.name),
                 subtitle: Text(d.address),
-                onTap: () {
-                  final next = widget.profile.copyWith(
-                    transport: 'bluetooth',
-                    address: d.address,
-                    displayName: d.name,
-                  );
-                  widget.onChanged(next);
-                },
                 trailing: TextButton(
-                  onPressed: widget.busy
+                  onPressed: _busy
                       ? null
                       : () {
                           final next = widget.profile.copyWith(
@@ -489,40 +897,20 @@ class _PrintersPageState extends State<PrintersPage> {
                             address: d.address,
                             displayName: d.name,
                           );
-                          widget.onConnect(next);
+                          widget.onProfileChanged(next);
+                          _run(() => PrintBridge.instance.connect(next), 'Connected');
                         },
-                  child: const Text('Connect'),
+                  child: const Text('Use'),
                 ),
-              );
-            }),
+              )),
+          TextButton(onPressed: _reload, child: const Text('Refresh Bluetooth')),
         ],
         if (_transport == 'usb') ...[
-          Row(
-            children: [
-              const Expanded(child: Text('USB devices')),
-              IconButton(onPressed: _reload, icon: const Icon(Icons.refresh)),
-            ],
-          ),
-          if (_usb.isEmpty)
-            const Text('No USB printers detected. Use an OTG cable if needed.')
-          else
-            ..._usb.map((d) {
-              final selected = widget.profile.address == d.deviceName && widget.profile.transport == 'usb';
-              return ListTile(
-                leading: Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off),
+          ..._usb.map((d) => ListTile(
                 title: Text(d.productName),
-                subtitle: Text('${d.deviceName}\nVID ${d.vendorId} / PID ${d.productId}'),
-                isThreeLine: true,
-                onTap: () {
-                  final next = widget.profile.copyWith(
-                    transport: 'usb',
-                    address: d.deviceName,
-                    displayName: d.productName,
-                  );
-                  widget.onChanged(next);
-                },
+                subtitle: Text(d.deviceName),
                 trailing: TextButton(
-                  onPressed: widget.busy
+                  onPressed: _busy
                       ? null
                       : () {
                           final next = widget.profile.copyWith(
@@ -530,49 +918,38 @@ class _PrintersPageState extends State<PrintersPage> {
                             address: d.deviceName,
                             displayName: d.productName,
                           );
-                          widget.onConnect(next);
+                          widget.onProfileChanged(next);
+                          _run(() => PrintBridge.instance.connect(next), 'Connected');
                         },
-                  child: const Text('Connect'),
+                  child: const Text('Use'),
                 ),
-              );
-            }),
+              )),
+          TextButton(onPressed: _reload, child: const Text('Refresh USB')),
         ],
         if (_transport == 'tcp') ...[
-          const Text('Network printer (AppSocket / port 9100)'),
+          TextField(controller: _host, decoration: const InputDecoration(labelText: 'Host IP', border: OutlineInputBorder())),
           const SizedBox(height: 8),
-          TextField(
-            controller: _hostCtrl,
-            decoration: const InputDecoration(
-              labelText: 'IP address / host',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.url,
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _portCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Port',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: 12),
+          TextField(controller: _port, decoration: const InputDecoration(labelText: 'Port', border: OutlineInputBorder())),
+          const SizedBox(height: 8),
           FilledButton(
-            onPressed: widget.busy
+            onPressed: _busy
                 ? null
                 : () {
-                    final port = int.tryParse(_portCtrl.text.trim()) ?? 9100;
                     final next = widget.profile.copyWith(
                       transport: 'tcp',
-                      address: _hostCtrl.text.trim(),
-                      displayName: _hostCtrl.text.trim(),
-                      tcpPort: port,
+                      address: _host.text.trim(),
+                      displayName: _host.text.trim(),
+                      tcpPort: int.tryParse(_port.text.trim()) ?? 9100,
                     );
-                    widget.onConnect(next);
+                    widget.onProfileChanged(next);
+                    _run(() => PrintBridge.instance.connect(next), 'Connected');
                   },
             child: const Text('Save & connect'),
           ),
+        ],
+        if (_msg != null) ...[
+          const SizedBox(height: 12),
+          Text(_msg!),
         ],
       ],
     );
@@ -580,10 +957,16 @@ class _PrintersPageState extends State<PrintersPage> {
 }
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, required this.profile, required this.onSave});
+  const SettingsPage({
+    super.key,
+    required this.profile,
+    required this.onSaveProfile,
+    required this.onLogout,
+  });
 
   final PrinterProfile profile;
-  final ValueChanged<PrinterProfile> onSave;
+  final ValueChanged<PrinterProfile> onSaveProfile;
+  final VoidCallback onLogout;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -593,39 +976,67 @@ class _SettingsPageState extends State<SettingsPage> {
   late int _width = widget.profile.paperWidthMm;
   late String _graphics = widget.profile.graphicsCommand;
   late bool _autoCut = widget.profile.autoCut;
-  late String _codePage = widget.profile.codePage;
+  final _api = TextEditingController(text: RtsClient.instance.baseUrl);
+  final _seller = TextEditingController();
 
   @override
-  void didUpdateWidget(covariant SettingsPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.profile != widget.profile) {
-      _width = widget.profile.paperWidthMm;
-      _graphics = widget.profile.graphicsCommand;
-      _autoCut = widget.profile.autoCut;
-      _codePage = widget.profile.codePage;
-    }
+  void initState() {
+    super.initState();
+    RtsClient.instance.getDefaultSeller().then((s) {
+      if (mounted) _seller.text = s;
+    });
+  }
+
+  @override
+  void dispose() {
+    _api.dispose();
+    _seller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = RtsClient.instance.user;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
-        const Text('Settings', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 16),
-        const Text('Paper width'),
+        const Text('Settings', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
+        Text('Signed in as ${user?.name ?? 'POS'}'),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _api,
+          decoration: const InputDecoration(labelText: 'RTS API base URL', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _seller,
+          decoration: const InputDecoration(labelText: 'Default seller name', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 10),
+        FilledButton(
+          onPressed: () async {
+            await RtsClient.instance.setBaseUrl(_api.text);
+            await RtsClient.instance.setDefaultSeller(_seller.text);
+            if (!mounted) return;
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              const SnackBar(content: Text('API settings saved')),
+            );
+          },
+          child: const Text('Save API / seller'),
+        ),
+        const SizedBox(height: 24),
+        const Text('Paper width'),
         SegmentedButton<int>(
           segments: const [
-            ButtonSegment(value: 58, label: Text('58mm (384)')),
-            ButtonSegment(value: 80, label: Text('80mm (576)')),
+            ButtonSegment(value: 58, label: Text('58mm')),
+            ButtonSegment(value: 80, label: Text('80mm')),
           ],
           selected: {_width},
           onSelectionChanged: (s) => setState(() => _width = s.first),
         ),
-        const SizedBox(height: 16),
-        const Text('Graphics command'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
+        const Text('Graphics'),
         SegmentedButton<String>(
           segments: const [
             ButtonSegment(value: 'gs_v_0', label: Text('GS v 0')),
@@ -634,153 +1045,27 @@ class _SettingsPageState extends State<SettingsPage> {
           selected: {_graphics},
           onSelectionChanged: (s) => setState(() => _graphics = s.first),
         ),
-        const SizedBox(height: 8),
-        Text(
-          _graphics == 'esc_star'
-              ? 'Epson-style bit-image mode'
-              : 'Best for most 58mm clones including KJ-5802H',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
         SwitchListTile(
           title: const Text('Auto cut'),
           value: _autoCut,
           onChanged: (v) => setState(() => _autoCut = v),
         ),
-        const SizedBox(height: 8),
-        DropdownMenu<String>(
-          initialSelection: _codePage,
-          label: const Text('Text code page'),
-          dropdownMenuEntries: const [
-            DropdownMenuEntry(value: 'CP437', label: 'CP437'),
-            DropdownMenuEntry(value: 'CP850', label: 'CP850'),
-            DropdownMenuEntry(value: 'CP858', label: 'CP858'),
-            DropdownMenuEntry(value: 'CP866', label: 'CP866'),
-            DropdownMenuEntry(value: 'windows-1252', label: 'Windows-1252'),
-            DropdownMenuEntry(value: 'UTF-8', label: 'UTF-8'),
-          ],
-          onSelected: (v) {
-            if (v != null) setState(() => _codePage = v);
-          },
-        ),
-        const SizedBox(height: 20),
         FilledButton(
           onPressed: () {
-            widget.onSave(
-              widget.profile.copyWith(
-                paperWidthMm: _width,
-                graphicsCommand: _graphics,
-                autoCut: _autoCut,
-                codePage: _codePage,
-                dotsPerLine: _width >= 80 ? 576 : 384,
-              ),
-            );
+            widget.onSaveProfile(widget.profile.copyWith(
+              paperWidthMm: _width,
+              graphicsCommand: _graphics,
+              autoCut: _autoCut,
+              dotsPerLine: _width >= 80 ? 576 : 384,
+            ));
           },
-          child: const Text('Save settings'),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'System print: enable “Thermal Print” under Android Settings → Connected devices → Connection preferences → Printing.',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-      ],
-    );
-  }
-}
-
-class PreviewPage extends StatefulWidget {
-  const PreviewPage({
-    super.key,
-    required this.pending,
-    required this.busy,
-    required this.onPrint,
-    required this.onClear,
-    required this.onPrintText,
-  });
-
-  final IncomingPrint? pending;
-  final bool busy;
-  final VoidCallback? onPrint;
-  final VoidCallback onClear;
-  final ValueChanged<String> onPrintText;
-
-  @override
-  State<PreviewPage> createState() => _PreviewPageState();
-}
-
-class _PreviewPageState extends State<PreviewPage> {
-  final _textCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _textCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final pending = widget.pending;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      children: [
-        const Text('Preview / Share', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        Text(
-          'Shared files and thermalprint: links land here.',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 16),
-        if (pending == null)
-          const Text('Nothing queued. Share an image, PDF, or text to Thermal Print.')
-        else ...[
-          Card(
-            child: ListTile(
-              title: Text(pending.previewLabel),
-              subtitle: Text(
-                () {
-                  final text = pending.text;
-                  if (text != null && text.isNotEmpty) {
-                    return text.length <= 160 ? text : '${text.substring(0, 160)}…';
-                  }
-                  return pending.uri ?? pending.mimeType ?? 'Ready to print';
-                }(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: widget.busy ? null : widget.onPrint,
-            icon: const Icon(Icons.print),
-            label: const Text('Print shared content'),
-          ),
-          TextButton(onPressed: widget.onClear, child: const Text('Clear')),
-        ],
-        const SizedBox(height: 24),
-        const Text('Quick text print'),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _textCtrl,
-          minLines: 4,
-          maxLines: 8,
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: 'Type receipt text…',
-          ),
-        ),
-        const SizedBox(height: 10),
-        OutlinedButton(
-          onPressed: widget.busy || _textCtrl.text.trim().isEmpty
-              ? null
-              : () => widget.onPrintText(_textCtrl.text),
-          child: const Text('Print text'),
+          child: const Text('Save printer settings'),
         ),
         const SizedBox(height: 24),
-        Text('URI API examples', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        SelectableText(
-          'thermalprint:text,${Uri.encodeComponent('Hello from Thermal Print')}\n'
-          'thermalprint:base64,${base64Encode(utf8.encode('Hello raw\\n'))}',
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+        OutlinedButton.icon(
+          onPressed: widget.onLogout,
+          icon: const Icon(Icons.logout),
+          label: const Text('Logout'),
         ),
       ],
     );

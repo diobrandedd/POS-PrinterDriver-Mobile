@@ -1,41 +1,28 @@
-# Thermal Print
+# POS Thermal (Mobile)
 
-Personal Android ESC/POS thermal printer driver (RawBT-style) built with Flutter + Kotlin.
+Android POS terminal for Pyx Tracker / RTS with Bluetooth ESC/POS printing (no watermark).
 
 ## Features
+- POS PIN login against RTS (`Bearer` token)
+- Sell (barcode lookup → cash checkout → auto-print)
+- AR credit checkout
+- Sales history, reprint, full-sale refund (updates RTS website data)
+- Printer: Bluetooth / USB / Wi‑Fi 9100
 
-- Bluetooth Classic (SPP), USB Host, and Wi‑Fi/Ethernet (TCP port 9100)
-- Pair/select printer and run a watermark-free test print
-- Android system **Print Service** (Chrome, Docs, etc.)
-- Share / Open images, PDF, and text into the app
-- Custom URI schemes: `thermalprint:` and `rawprint:`
-- 58mm (384 dots) and 80mm (576 dots), `GS v 0` or `ESC *`
+## Default API
+`https://pyxtracker.pyxfood.com/rts/api/v1`
 
-Defaults are tuned for **KJ-5802H** and similar 58mm ESC/POS clones.
+Changeable in the login screen or Settings.
 
-## Setup
+## RTS server requirements
+This app needs the mobile POS API changes in the RTS repo:
+- Bearer tokens on `auth.php?action=pos_login`
+- `pos.php?action=sales_history|receipt_get|sale_refund`
 
-1. Install Flutter and an Android device/emulator with Bluetooth if testing BT.
-2. From this folder:
+See `sql/migration_phase80_pos_mobile_tokens.sql` in the RTS project.
 
+## Run
 ```bash
 flutter pub get
 flutter run
 ```
-
-3. Pair your printer in Android Bluetooth settings (PIN often `0000` or `1234`).
-4. Open **Printers** in the app → select the device → **Test print**.
-5. Enable the print service: **Settings → Connected devices → Connection preferences → Printing → Thermal Print**.
-
-## URI API
-
-- `thermalprint:text,Hello%20World`
-- `thermalprint:base64,<base64-esc-pos-or-text-bytes>`
-- `thermalprint:data:text/plain;base64,<base64>`
-- `thermalprint:data:image/png;base64,<base64>`
-- Same with `rawprint:` scheme
-
-## Notes
-
-- No watermark is ever added to print output.
-- For personal / sideload use. System Print Service and Share intents are Android-only.
