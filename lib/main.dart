@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -8,6 +10,9 @@ import 'package:thermal_print/src/pos/receipt_image.dart';
 import 'package:thermal_print/src/print_bridge.dart';
 import 'package:thermal_print/src/theme/pos_theme.dart';
 import 'package:thermal_print/src/ui/pos_chrome.dart';
+
+/// Auto-return to login after this much idle time (security).
+const Duration kPosIdleLockTimeout = Duration(seconds: 30);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -212,15 +217,60 @@ class PosShell extends StatefulWidget {
   State<PosShell> createState() => _PosShellState();
 }
 
-class _PosShellState extends State<PosShell> {
+class _PosShellState extends State<PosShell> with WidgetsBindingObserver {
   int _index = 0;
   PrinterProfile _profile = const PrinterProfile();
   bool _connected = false;
+  Timer? _idleTimer;
+  bool _locking = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
     _refreshPrinter();
+    _armIdleTimer();
+  }
+
+  @override
+  void dispose() {
+    _idleTimer?.cancel();
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Screen off, app switcher, background, or process teardown → login again.
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        unawaited(_lockSession());
+        break;
+      case AppLifecycleState.resumed:
+        break;
+    }
+  }
+
+  bool _onKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      _armIdleTimer();
+    }
+    return false;
+  }
+
+  void _onUserActivity(PointerEvent _) => _armIdleTimer();
+
+  void _armIdleTimer() {
+    _idleTimer?.cancel();
+    if (_locking) return;
+    _idleTimer = Timer(kPosIdleLockTimeout, () {
+      unawaited(_lockSession());
+    });
   }
 
   Future<void> _refreshPrinter() async {
@@ -235,11 +285,18 @@ class _PosShellState extends State<PosShell> {
     } catch (_) {}
   }
 
-  Future<void> _logout() async {
-    await RtsClient.instance.logout();
+  Future<void> _logout() => _lockSession(remote: true);
+
+  Future<void> _lockSession({bool remote = false}) async {
+    if (_locking || !mounted) return;
+    _locking = true;
+    _idleTimer?.cancel();
+    // Clear token locally first so a killed/backgrounded app cannot resume the session.
+    await RtsClient.instance.logout(remote: remote);
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginPage()),
+      (_) => false,
     );
   }
 
@@ -271,29 +328,38 @@ class _PosShellState extends State<PosShell> {
       ),
     ];
 
-    return Scaffold(
-      body: SafeArea(child: pages[_index]),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.point_of_sale_outlined),
-            selectedIcon: Icon(Icons.point_of_sale),
-            label: 'Sell',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.credit_score_outlined),
-            selectedIcon: Icon(Icons.credit_score),
-            label: 'AR',
-          ),
-          NavigationDestination(icon: Icon(Icons.history), label: 'History'),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _onUserActivity,
+      onPointerMove: _onUserActivity,
+      onPointerSignal: _onUserActivity,
+      child: Scaffold(
+        body: SafeArea(child: pages[_index]),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (i) {
+            _armIdleTimer();
+            setState(() => _index = i);
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.point_of_sale_outlined),
+              selectedIcon: Icon(Icons.point_of_sale),
+              label: 'Sell',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.credit_score_outlined),
+              selectedIcon: Icon(Icons.credit_score),
+              label: 'AR',
+            ),
+            NavigationDestination(icon: Icon(Icons.history), label: 'History'),
+            NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings),
+              label: 'Settings',
+            ),
+          ],
+        ),
       ),
     );
   }
