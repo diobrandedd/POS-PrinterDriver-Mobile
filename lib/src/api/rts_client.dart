@@ -59,13 +59,14 @@ class RtsClient {
     return _acceptToken(data);
   }
 
-  /// Staff assigned in RTS Settings → Mobile POS staff.
-  Future<Map<String, dynamic>> posStaffLogin(String username, String password) async {
+  /// Staff assigned in RTS Settings → Mobile POS staff (or executives).
+  /// Sign in with employee ID only.
+  Future<Map<String, dynamic>> posStaffLogin(String employeeId) async {
     final data = await _request(
       'POST',
       'auth.php',
       action: 'pos_staff_login',
-      body: {'username': username.trim(), 'password': password},
+      body: {'pin': employeeId.trim(), 'password': employeeId.trim()},
       auth: false,
     );
     return _acceptToken(data);

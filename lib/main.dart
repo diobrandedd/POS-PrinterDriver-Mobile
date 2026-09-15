@@ -51,8 +51,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _user = TextEditingController();
-  final _pass = TextEditingController();
+  final _pin = TextEditingController();
   final _api = TextEditingController(text: RtsClient.instance.baseUrl);
   bool _busy = false;
   bool _obscure = true;
@@ -61,8 +60,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
-    _user.dispose();
-    _pass.dispose();
+    _pin.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -74,7 +72,7 @@ class _LoginPageState extends State<LoginPage> {
     });
     try {
       await RtsClient.instance.setBaseUrl(_api.text);
-      await RtsClient.instance.posStaffLogin(_user.text, _pass.text);
+      await RtsClient.instance.posStaffLogin(_pin.text);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const PosShell()),
@@ -139,31 +137,20 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Executives or assigned Mobile POS staff. Use your IMS username and employee ID.',
+                          'Enter your employee ID. Only executives and staff assigned in Settings can open the app.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 16),
                         TextField(
-                          controller: _user,
-                          textInputAction: TextInputAction.next,
-                          autofillHints: const [AutofillHints.username],
-                          decoration: const InputDecoration(
-                            labelText: 'Username',
-                            hintText: 'e.g. Cristelyn_A',
-                            prefixIcon: Icon(Icons.person_outline),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _pass,
+                          controller: _pin,
                           obscureText: _obscure,
                           textInputAction: TextInputAction.done,
-                          keyboardType: TextInputType.visiblePassword,
-                          autofillHints: const [AutofillHints.password],
+                          keyboardType: TextInputType.number,
+                          autofillHints: const [AutofillHints.oneTimeCode],
                           decoration: InputDecoration(
                             labelText: 'Employee ID',
-                            hintText: 'Your ID is the password',
-                            prefixIcon: const Icon(Icons.badge_outlined),
+                            hintText: 'e.g. 023011',
+                            prefixIcon: const Icon(Icons.pin_outlined),
                             suffixIcon: IconButton(
                               tooltip: _obscure ? 'Show ID' : 'Hide ID',
                               onPressed: () => setState(() => _obscure = !_obscure),

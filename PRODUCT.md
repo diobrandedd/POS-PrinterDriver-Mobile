@@ -24,7 +24,7 @@ Android phones/tablets; Bluetooth KJ-5802H-class printers; RTS API (`pos_staff_l
 
 ## Capabilities and Constraints
 
-- Login for assigned Mobile POS staff (IMS username/password).
+- Login for assigned Mobile POS staff (employee ID only).
 - Sell, AR credit, sales history (reprint / full refund), printer connection, settings.
 - Checkout discounts 0% / 10% / 20%; seller name from logged-in staff.
 - Receipt layout matches web POS (Pyx logo, Buyer/Seller, line items, totals).
@@ -36,7 +36,7 @@ Android phones/tablets; Bluetooth KJ-5802H-class printers; RTS API (`pos_staff_l
 - Official POS seal logo (launcher icon + login mark): `assets/pyx_pos_logo.png` / `assets/pyx_pos_mark.png`.
 - Receipt mark: `assets/pyxfoodpr.png`.
 - Seal forest green (`#205010`) as primary; RTS gold `#C8900A` as secondary commerce accent when needed.
-- Mobile POS sign-in: IMS username + employee ID; executives or assigned Mobile POS staff only.
+- Mobile POS sign-in: employee ID only; executives or assigned Mobile POS staff only.
 
 ## Evidence on Hand
 
