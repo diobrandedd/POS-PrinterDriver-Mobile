@@ -25,15 +25,9 @@ class RtsClient {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _baseUrl = prefs.getString(_baseKey) ?? _defaultBase;
-    _token = await _storage.read(key: _tokenKey);
-    if (isLoggedIn) {
-      try {
-        await me();
-      } catch (_) {
-        // stale token — stay logged out until PIN
-        await logout(remote: false);
-      }
-    }
+    // Shared POS terminal: always require staff sign-in on cold start
+    // (do not restore a previous Bearer session).
+    await logout(remote: false);
   }
 
   Future<void> setBaseUrl(String url) async {

@@ -89,47 +89,46 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: Form(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(24, 36, 24, 32),
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
                 children: [
-                  Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: Image.asset(
-                          'assets/pyxfoodpr.png',
-                          width: 56,
-                          height: 56,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Container(
-                            width: 56,
-                            height: 56,
-                            color: PosColors.forestSoft,
-                            child: const Icon(Icons.point_of_sale, color: PosColors.forest),
-                          ),
+                  Center(
+                    child: Image.asset(
+                      'assets/pyx_pos_mark.png',
+                      width: 148,
+                      height: 148,
+                      fit: BoxFit.contain,
+                      semanticLabel: 'Pyx Food Products POS',
+                      errorBuilder: (_, _, _) => Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: PosColors.forestSoft,
+                          borderRadius: BorderRadius.circular(60),
                         ),
+                        child: const Icon(Icons.point_of_sale, color: PosColors.forest, size: 48),
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Pyx POS', style: Theme.of(context).textTheme.headlineMedium),
-                            Text(
-                              'Staff terminal',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Pyx POS',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Food Products · Staff terminal',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 24),
                   PosPanel(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -140,7 +139,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Use your assigned staff username and password.',
+                          'Executives or assigned Mobile POS staff. Use your IMS username and employee ID.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 16),
@@ -150,6 +149,7 @@ class _LoginPageState extends State<LoginPage> {
                           autofillHints: const [AutofillHints.username],
                           decoration: const InputDecoration(
                             labelText: 'Username',
+                            hintText: 'e.g. Cristelyn_A',
                             prefixIcon: Icon(Icons.person_outline),
                           ),
                         ),
@@ -158,12 +158,14 @@ class _LoginPageState extends State<LoginPage> {
                           controller: _pass,
                           obscureText: _obscure,
                           textInputAction: TextInputAction.done,
+                          keyboardType: TextInputType.visiblePassword,
                           autofillHints: const [AutofillHints.password],
                           decoration: InputDecoration(
-                            labelText: 'Password',
-                            prefixIcon: const Icon(Icons.lock_outline),
+                            labelText: 'Employee ID',
+                            hintText: 'Your ID is the password',
+                            prefixIcon: const Icon(Icons.badge_outlined),
                             suffixIcon: IconButton(
-                              tooltip: _obscure ? 'Show password' : 'Hide password',
+                              tooltip: _obscure ? 'Show ID' : 'Hide ID',
                               onPressed: () => setState(() => _obscure = !_obscure),
                               icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
                             ),

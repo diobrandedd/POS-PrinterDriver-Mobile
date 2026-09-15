@@ -1,7 +1,7 @@
 name: thermal_print
 description: Mobile POS terminal with ESC/POS thermal printing, backed by RTS.
 publish_to: 'none'
-version: 1.2.1+4
+version: 1.2.2+5
 
 environment:
   sdk: ^3.12.0
@@ -20,8 +20,22 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/pyx_pos_icon.png
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/pyx_pos_icon_fg.png
+  adaptive_icon_foreground_inset: 12
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true
   assets:
     - assets/pyxfoodpr.png
+    - assets/pyx_pos_logo.png
+    - assets/pyx_pos_mark.png
+    - assets/pyx_pos_icon.png
+    - assets/pyx_pos_icon_fg.png

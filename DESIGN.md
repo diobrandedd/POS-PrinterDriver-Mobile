@@ -4,17 +4,22 @@
 
 ## World
 
-Dense Swiss / Square-style mobile POS. Task-first checkout: scan → cart → charge. Fluorescent shop-floor light mode.
+Dense Swiss / Square-style mobile POS polished around the official **Pyx POS Food Products** seal. Task-first checkout under shop-floor light.
 
-Source: ui-ux-pro-max (`mobile POS retail`, Minimalism & Swiss, density 8) + Square Retail cart/charge patterns. Pyx brand colors override the skill’s navy primary.
+## Brand mark
+
+- Launcher / adaptive icons generated from `assets/pyx_pos_logo.png`
+- In-app mark: `assets/pyx_pos_mark.png` (login hero)
+- Receipt mark remains `assets/pyxfoodpr.png`
 
 ## Palette
 
 | Token | Hex | Role |
 |---|---|---|
-| Forest | `#145C45` | Brand primary, nav, scan CTA |
-| Charge | `#059669` | Pay / AR money actions (Square-like) |
-| Gold | `#C8900A` | Secondary brand accent |
+| Forest | `#205010` | Seal green — primary, nav, scan CTA |
+| Forest deep | `#143508` | Strong brand surfaces |
+| Charge | `#059669` | Pay / AR money actions |
+| Gold | `#C8900A` | Secondary RTS accent |
 | Ink | `#0F172A` | Body text |
 | Muted | `#475569` | Secondary labels |
 | Line | `#E2E8F0` | Borders |
@@ -29,18 +34,17 @@ Source: ui-ux-pro-max (`mobile POS retail`, Minimalism & Swiss, density 8) + Squ
 
 ## Layout patterns
 
+- Login: centered seal + Sign in panel
 - Checkout workbench header with staff + printer status
-- Large scan hero (56dp)
-- Receipt-like cart rows, 40dp qty steppers (≥48dp effective with padding)
-- Sticky **Charge** bar with 10% / 20% discount chips
-- Scan sheet as bottom sheet (keyboard-safe)
+- Large scan hero; sticky Charge bar with 10%/20%
 - 4-tab NavigationBar: Sell · AR · History · Settings
+- App label: **Pyx POS**
 
 ## Motion
 
-Subtle Material ripple only (motion dial 3). No page-load choreography.
+Subtle Material ripple only. No page-load choreography.
 
 ## Authority files
 
-- `design-system/pyx-pos/MASTER.md` (ui-ux-pro-max persist)
-- Brand overrides live here and in `lib/src/theme/pos_theme.dart`
+- `design-system/pyx-pos/MASTER.md`
+- Tokens in `lib/src/theme/pos_theme.dart`

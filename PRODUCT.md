@@ -33,8 +33,10 @@ Android phones/tablets; Bluetooth KJ-5802H-class printers; RTS API (`pos_staff_l
 ## Brand Commitments
 
 - Pyx Food / Pyx Tracker product family.
-- Existing mark: `assets/pyxfoodpr.png` on receipts.
-- Green associated with current app seed (`#1F6F4A`); RTS web accent gold `#C8900A` for primary commerce actions where it aids recognition.
+- Official POS seal logo (launcher icon + login mark): `assets/pyx_pos_logo.png` / `assets/pyx_pos_mark.png`.
+- Receipt mark: `assets/pyxfoodpr.png`.
+- Seal forest green (`#205010`) as primary; RTS gold `#C8900A` as secondary commerce accent when needed.
+- Mobile POS sign-in: IMS username + employee ID; executives or assigned Mobile POS staff only.
 
 ## Evidence on Hand
 

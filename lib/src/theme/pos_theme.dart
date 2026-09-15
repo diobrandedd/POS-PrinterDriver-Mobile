@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Dense Swiss-style POS tokens. Pyx forest brand + emerald charge CTA (Square-like).
+/// Dense Swiss-style POS tokens. Pyx seal green + emerald charge CTA.
 abstract final class PosColors {
-  static const forest = Color(0xFF145C45);
-  static const forestDeep = Color(0xFF0B3D2E);
-  static const forestSoft = Color(0xFFE4F0EA);
+  /// Sampled from the Pyx POS seal logo.
+  static const forest = Color(0xFF205010);
+  static const forestDeep = Color(0xFF143508);
+  static const forestSoft = Color(0xFFE8F0E4);
   static const charge = Color(0xFF059669);
   static const chargeDeep = Color(0xFF047857);
   static const gold = Color(0xFFC8900A);
