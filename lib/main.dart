@@ -442,7 +442,20 @@ class _SellPageState extends State<SellPage> {
     }
   }
 
-  Future<void> _checkout(int discountPercent) async {
+  Future<void> _beginCheckout() async {
+    if (_lines.isEmpty) return;
+    final payment = await showPaymentSheet(context, subtotal: _total);
+    if (payment == null || !mounted) return;
+    await _checkout(
+      discountPercent: payment.discountPercent,
+      amountPaid: payment.amountPaid,
+    );
+  }
+
+  Future<void> _checkout({
+    required int discountPercent,
+    required double amountPaid,
+  }) async {
     if (_lines.isEmpty) return;
     setState(() {
       _busy = true;
@@ -474,15 +487,27 @@ class _SellPageState extends State<SellPage> {
         _buyer.clear();
       });
       if (mounted) {
-        await showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Sale complete'),
-            content: Text('${receipt.receiptNo}\nTotal ₱${receipt.total.toStringAsFixed(2)}'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
-            ],
-          ),
+        final deduct = receipt.total;
+        final change = amountPaid - deduct;
+        // Open cashbox when showing change (best-effort).
+        try {
+          await PrintBridge.instance.openCashDrawer();
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Cashbox did not open: $e')),
+            );
+          }
+        }
+        if (!mounted) return;
+        await showChangeDialog(
+          context,
+          receiptNo: receipt.receiptNo,
+          amountReceived: amountPaid,
+          amountToDeduct: deduct,
+          change: change < 0 ? 0 : change,
+          discountPercent: receipt.discountPercent,
+          discountAmount: receipt.discountAmount,
         );
         if (mounted) _promptAdd();
       }
@@ -578,9 +603,7 @@ class _SellPageState extends State<SellPage> {
           itemCount: _lines.fold<int>(0, (a, b) => a + b.qty),
           enabled: canCheckout,
           busy: _busy,
-          onFull: () => _checkout(0),
-          onTen: () => _checkout(10),
-          onTwenty: () => _checkout(20),
+          onCheckout: _beginCheckout,
         ),
       ],
     );

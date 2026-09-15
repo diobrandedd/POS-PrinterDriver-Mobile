@@ -82,6 +82,12 @@ class PrintEngine(private val context: Context) {
         }
     }
 
+    fun openCashDrawer(pin: Int = 0): Map<String, Any?> {
+        val data = EscPosEncoder.encodeOpenCashDrawer(pin = pin)
+        printRaw(data)
+        return mapOf("ok" to true, "bytes" to data.size)
+    }
+
     fun printTest(): Map<String, Any?> {
         val profile = settings.load()
         val data = EscPosEncoder.buildTestReceipt(profile)

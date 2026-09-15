@@ -57,6 +57,10 @@ class PrintMethodChannel(
                 }
             }
             "disconnect" -> runAsync(result) { engine.disconnect() }
+            "openCashDrawer" -> runAsync(result) {
+                val pin = call.argument<Int>("pin") ?: 0
+                engine.openCashDrawer(pin = pin)
+            }
             "printTest" -> runAsync(result) { engine.printTest() }
             "printText" -> runAsync(result) {
                 val text = call.argument<String>("text")

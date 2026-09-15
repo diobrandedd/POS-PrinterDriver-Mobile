@@ -1,7 +1,7 @@
 name: thermal_print
 description: Mobile POS terminal with ESC/POS thermal printing, backed by RTS.
 publish_to: 'none'
-version: 1.2.6+9
+version: 1.2.7+10
 
 environment:
   sdk: ^3.12.0

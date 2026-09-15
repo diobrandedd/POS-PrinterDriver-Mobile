@@ -463,18 +463,14 @@ class CheckoutBar extends StatelessWidget {
     required this.subtotal,
     required this.enabled,
     required this.busy,
-    required this.onFull,
-    required this.onTen,
-    required this.onTwenty,
+    required this.onCheckout,
     this.itemCount = 0,
   });
 
   final double subtotal;
   final bool enabled;
   final bool busy;
-  final VoidCallback onFull;
-  final VoidCallback onTen;
-  final VoidCallback onTwenty;
+  final VoidCallback onCheckout;
   final int itemCount;
 
   @override
@@ -503,7 +499,7 @@ class CheckoutBar extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               FilledButton(
-                onPressed: enabled && !busy ? onFull : null,
+                onPressed: enabled && !busy ? onCheckout : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: PosColors.charge,
                   foregroundColor: Colors.white,
@@ -517,32 +513,275 @@ class CheckoutBar extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
                       )
                     : Text(
-                        'Charge ₱${subtotal.toStringAsFixed(2)}',
+                        'Checkout ₱${subtotal.toStringAsFixed(2)}',
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                       ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: enabled && !busy ? onTen : null,
-                      child: Text('10% · ₱${(subtotal * 0.9).toStringAsFixed(2)}'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: enabled && !busy ? onTwenty : null,
-                      child: Text('20% · ₱${(subtotal * 0.8).toStringAsFixed(2)}'),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Result from the payment bottom sheet before API checkout.
+class PaymentSheetResult {
+  const PaymentSheetResult({
+    required this.amountPaid,
+    required this.discountPercent,
+  });
+
+  final double amountPaid;
+  final int discountPercent;
+}
+
+double payableTotal(double subtotal, int discountPercent) {
+  if (discountPercent == 10) return subtotal * 0.9;
+  if (discountPercent == 20) return subtotal * 0.8;
+  return subtotal;
+}
+
+/// Amount paid + optional 0/10/20% discount. Returns null if cancelled.
+Future<PaymentSheetResult?> showPaymentSheet(
+  BuildContext context, {
+  required double subtotal,
+}) async {
+  return showModalBottomSheet<PaymentSheetResult>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) => _PaymentSheetBody(subtotal: subtotal),
+  );
+}
+
+class _PaymentSheetBody extends StatefulWidget {
+  const _PaymentSheetBody({required this.subtotal});
+
+  final double subtotal;
+
+  @override
+  State<_PaymentSheetBody> createState() => _PaymentSheetBodyState();
+}
+
+class _PaymentSheetBodyState extends State<_PaymentSheetBody> {
+  final _paid = TextEditingController();
+  int _discountPercent = 0;
+
+  @override
+  void dispose() {
+    _paid.dispose();
+    super.dispose();
+  }
+
+  double? get _amountPaid {
+    final raw = _paid.text.trim().replaceAll(',', '');
+    if (raw.isEmpty) return null;
+    return double.tryParse(raw);
+  }
+
+  double get _payable => payableTotal(widget.subtotal, _discountPercent);
+
+  bool get _canConfirm {
+    final paid = _amountPaid;
+    if (paid == null) return false;
+    return paid + 0.0001 >= _payable;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final paid = _amountPaid;
+    final change = paid != null && paid >= _payable ? paid - _payable : null;
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Payment', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 4),
+          Text(
+            'Enter amount paid, then choose a discount if needed.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _paid,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Amount paid',
+              prefixText: '₱ ',
+              prefixIcon: Icon(Icons.payments_outlined),
+            ),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) {
+              if (_canConfirm) {
+                Navigator.pop(
+                  context,
+                  PaymentSheetResult(
+                    amountPaid: _amountPaid!,
+                    discountPercent: _discountPercent,
+                  ),
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 14),
+          Text('Discount', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 8),
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 0, label: Text('None')),
+              ButtonSegment(value: 10, label: Text('10%')),
+              ButtonSegment(value: 20, label: Text('20%')),
+            ],
+            selected: {_discountPercent},
+            onSelectionChanged: (set) {
+              setState(() => _discountPercent = set.first);
+            },
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Text('Amount due', style: theme.textTheme.bodyMedium),
+              const Spacer(),
+              MoneyText(_payable, style: theme.textTheme.titleMedium),
+            ],
+          ),
+          if (change != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Text('Change', style: theme.textTheme.bodyMedium),
+                const Spacer(),
+                MoneyText(change, style: theme.textTheme.titleMedium),
+              ],
+            ),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _canConfirm
+                      ? () => Navigator.pop(
+                            context,
+                            PaymentSheetResult(
+                              amountPaid: _amountPaid!,
+                              discountPercent: _discountPercent,
+                            ),
+                          )
+                      : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: PosColors.charge,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: PosColors.line,
+                  ),
+                  child: const Text('Confirm'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> showChangeDialog(
+  BuildContext context, {
+  required String receiptNo,
+  required double amountReceived,
+  required double amountToDeduct,
+  required double change,
+  int? discountPercent,
+  double? discountAmount,
+}) {
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) {
+      final theme = Theme.of(ctx);
+      return AlertDialog(
+        title: const Text('Sale complete'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(receiptNo, style: theme.textTheme.bodySmall),
+            const SizedBox(height: 12),
+            _ChangeRow(label: 'Amount received', value: amountReceived),
+            if (discountPercent != null &&
+                discountPercent > 0 &&
+                discountAmount != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Discount ($discountPercent%)',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  Text(
+                    '-₱${discountAmount.toStringAsFixed(2)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 8),
+            _ChangeRow(label: 'Amount to deduct', value: amountToDeduct),
+            const Divider(height: 20),
+            _ChangeRow(
+              label: 'Change',
+              value: change,
+              emphasize: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+        ],
+      );
+    },
+  );
+}
+
+class _ChangeRow extends StatelessWidget {
+  const _ChangeRow({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+  });
+
+  final String label;
+  final double value;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = emphasize ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium;
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: style)),
+        MoneyText(value, style: style),
+      ],
     );
   }
 }

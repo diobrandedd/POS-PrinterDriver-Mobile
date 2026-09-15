@@ -17,6 +17,25 @@ object EscPosEncoder {
     private val FEED_LINES = byteArrayOf(0x1B, 0x64, 0x03)
     private val PARTIAL_CUT = byteArrayOf(0x1D, 0x56, 0x01)
 
+    /**
+     * ESC p m t1 t2 — pulse cash drawer kick connector.
+     * Default: pin 2 (m=0), ~50ms on / ~500ms off (t units = 2ms).
+     */
+    fun encodeOpenCashDrawer(
+        pin: Int = 0,
+        onTime: Int = 0x19,
+        offTime: Int = 0xFA,
+    ): ByteArray {
+        val m = if (pin == 1) 1 else 0
+        return byteArrayOf(
+            0x1B,
+            0x70,
+            m.toByte(),
+            (onTime and 0xFF).toByte(),
+            (offTime and 0xFF).toByte(),
+        )
+    }
+
     fun charsetFor(codePage: String): Charset {
         val name = when (codePage.uppercase(Locale.US)) {
             "CP437", "IBM437" -> "IBM437"

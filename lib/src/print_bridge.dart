@@ -226,6 +226,11 @@ class PrintBridge {
 
   Future<void> printTest() => _channel.invokeMethod<void>('printTest');
 
+  /// Pulse the cash drawer via ESC/POS `ESC p` on the connected printer.
+  /// [pin] 0 = drawer kick pin 2 (default), 1 = pin 5.
+  Future<void> openCashDrawer({int pin = 0}) =>
+      _channel.invokeMethod<void>('openCashDrawer', {'pin': pin});
+
   Future<void> printText(String text) =>
       _channel.invokeMethod<void>('printText', {'text': text});
 
