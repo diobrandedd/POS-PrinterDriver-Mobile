@@ -4,60 +4,97 @@ import 'package:thermal_print/src/api/rts_models.dart';
 const int kThermalCols = 28;
 const String kThermalFooter = 'This is not an Official Receipt';
 
-String formatSaleReceiptText(SaleReceipt receipt, {DateTime? printedAt}) {
-  final when = printedAt ?? DateTime.now();
-  final lines = <String>[];
+/// One printable receipt row. Amount rows keep label left + price right.
+class ReceiptLine {
+  const ReceiptLine.text(this.left) : right = '', kind = ReceiptLineKind.text;
+  const ReceiptLine.amount(this.left, this.right) : kind = ReceiptLineKind.amount;
+  const ReceiptLine.rule(this.left) : right = '', kind = ReceiptLineKind.rule;
+  const ReceiptLine.blank() : left = '', right = '', kind = ReceiptLineKind.blank;
+  const ReceiptLine.footer(this.left) : right = '', kind = ReceiptLineKind.footer;
 
-  lines.add(_center('Pyx Food Products'));
-  lines.add(_center(receipt.isAr ? 'AR Credit Receipt' : 'Walk-in Sales Receipt'));
-  lines.add(_center(receipt.receiptNo));
-  lines.add(_center(_formatEnPh(when)));
-  lines.add('-' * kThermalCols);
-  lines.add('Buyer: ${receipt.buyerName}');
+  final ReceiptLineKind kind;
+  final String left;
+  final String right;
+}
+
+enum ReceiptLineKind { text, amount, rule, blank, footer }
+
+List<ReceiptLine> buildSaleReceiptLines(SaleReceipt receipt, {DateTime? printedAt}) {
+  final when = printedAt ?? DateTime.now();
+  final lines = <ReceiptLine>[
+    ReceiptLine.text(_center('Pyx Food Products')),
+    ReceiptLine.text(
+      _center(receipt.isAr ? 'AR Credit Receipt' : 'Walk-in Sales Receipt'),
+    ),
+    ReceiptLine.text(_center(receipt.receiptNo)),
+    ReceiptLine.text(_center(_formatEnPh(when))),
+    ReceiptLine.rule('-' * kThermalCols),
+    ReceiptLine.text('Buyer: ${receipt.buyerName}'),
+  ];
+
   final seller = receipt.sellerName.trim();
   if (seller.isNotEmpty) {
-    lines.add('Seller: $seller');
+    lines.add(ReceiptLine.text('Seller: $seller'));
   }
   if (receipt.debtorMobile != null && receipt.debtorMobile!.trim().isNotEmpty) {
-    lines.add('Mobile: ${receipt.debtorMobile!.trim()}');
+    lines.add(ReceiptLine.text('Mobile: ${receipt.debtorMobile!.trim()}'));
   }
-  lines.add('');
+  lines.add(const ReceiptLine.blank());
 
   for (final item in receipt.items) {
-    final label = _itemLabel(item);
-    final price = _peso(item.lineTotal);
-    const maxLeft = kThermalCols - 10;
-    if (label.length <= maxLeft) {
-      lines.add(_padRow(label, price));
-    } else {
-      lines.add(label.substring(0, label.length < kThermalCols ? label.length : kThermalCols));
-      final end = label.length < kThermalCols * 2 ? label.length : kThermalCols * 2;
-      final rest = label.length > kThermalCols ? label.substring(kThermalCols, end) : '';
-      lines.add(_padRow(rest, price));
-    }
+    _addLabeledAmount(lines, _itemLabel(item), _peso(item.lineTotal));
   }
 
   if (receipt.discountPercent != null && receipt.discountPercent! > 0) {
-    lines.add('-' * kThermalCols);
-    lines.add(_padRow('Subtotal', _peso(receipt.subtotal ?? receipt.total)));
+    lines.add(ReceiptLine.rule('-' * kThermalCols));
     lines.add(
-      _padRow(
+      ReceiptLine.amount('Subtotal', _peso(receipt.subtotal ?? receipt.total)),
+    );
+    lines.add(
+      ReceiptLine.amount(
         'Discount (${receipt.discountPercent}%)',
         '-${_peso(receipt.discountAmount ?? 0)}',
       ),
     );
   }
 
-  lines.add('=' * kThermalCols);
-  lines.add(_padRow('TOTAL', _peso(receipt.total)));
+  lines.add(ReceiptLine.rule('=' * kThermalCols));
+  lines.add(ReceiptLine.amount('TOTAL', _peso(receipt.total)));
   if (receipt.refunded) {
-    lines.add(_center('** REFUNDED **'));
+    lines.add(ReceiptLine.text(_center('** REFUNDED **')));
   }
-  lines.add('');
-  // Footer is not COLS-truncated (matches RTS web CSS footer).
-  lines.add(kThermalFooter);
+  lines.add(const ReceiptLine.blank());
+  lines.add(const ReceiptLine.footer(kThermalFooter));
+  return lines;
+}
 
-  return lines.join('\n');
+String formatSaleReceiptText(SaleReceipt receipt, {DateTime? printedAt}) {
+  return buildSaleReceiptLines(receipt, printedAt: printedAt).map((line) {
+    switch (line.kind) {
+      case ReceiptLineKind.blank:
+        return '';
+      case ReceiptLineKind.amount:
+        return _padRow(line.left, line.right);
+      case ReceiptLineKind.text:
+      case ReceiptLineKind.rule:
+      case ReceiptLineKind.footer:
+        return line.left;
+    }
+  }).join('\n');
+}
+
+/// Prefer one row: label left, price right (same as web POS).
+/// Only wrap the label when it is too long for the price column.
+void _addLabeledAmount(List<ReceiptLine> lines, String label, String price) {
+  const maxLeft = kThermalCols - 10;
+  if (label.length <= maxLeft) {
+    lines.add(ReceiptLine.amount(label, price));
+    return;
+  }
+  lines.add(ReceiptLine.text(label.substring(0, kThermalCols)));
+  final end = label.length < kThermalCols * 2 ? label.length : kThermalCols * 2;
+  final rest = label.length > kThermalCols ? label.substring(kThermalCols, end) : '';
+  lines.add(ReceiptLine.amount(rest, price));
 }
 
 String _itemLabel(SaleReceiptItem item) {
@@ -120,7 +157,6 @@ String _center(String text, [int width = kThermalCols]) {
   return (' ' * left) + text;
 }
 
-/// en-PH-ish locale string similar to JS toLocaleString("en-PH")
 String _formatEnPh(DateTime dt) {
   final local = dt.toLocal();
   final m = local.month;
