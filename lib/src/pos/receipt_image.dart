@@ -101,25 +101,46 @@ _MeasuredRow _measureRow(
     case ReceiptLineKind.blank:
       return _MeasuredRow.blank(minLineHeight * 0.55);
     case ReceiptLineKind.amount:
+      final style = line.amountStyle ?? ReceiptAmountStyle.normal;
+      final size = switch (style) {
+        ReceiptAmountStyle.emphasis => fontSize * 1.18,
+        ReceiptAmountStyle.muted => fontSize * 0.86,
+        ReceiptAmountStyle.normal => fontSize,
+      };
+      final color = switch (style) {
+        ReceiptAmountStyle.muted => const ui.Color(0xFF6B7280),
+        ReceiptAmountStyle.emphasis => const ui.Color(0xFF000000),
+        ReceiptAmountStyle.normal => const ui.Color(0xFF000000),
+      };
+      final weight = style == ReceiptAmountStyle.emphasis
+          ? ui.FontWeight.w800
+          : ui.FontWeight.w400;
+      final rowMinH = style == ReceiptAmountStyle.muted
+          ? minLineHeight * 0.88
+          : (style == ReceiptAmountStyle.emphasis ? minLineHeight * 1.15 : minLineHeight);
       // Left label + right price on the SAME baseline — never wrap apart.
-      final priceW = _measureWidth(line.right, fontSize).clamp(72.0, contentW * 0.42);
+      final priceW = _measureWidth(line.right, size, weight: weight).clamp(72.0, contentW * 0.42);
       final gap = 8.0;
       final leftW = (contentW - priceW - gap).clamp(40.0, contentW);
       final left = _paragraph(
         line.left.isEmpty ? ' ' : line.left,
-        fontSize,
+        size,
         leftW,
         ui.TextAlign.left,
         maxLines: 2,
+        color: color,
+        fontWeight: weight,
       );
       final right = _paragraph(
         line.right,
-        fontSize,
+        size,
         priceW,
         ui.TextAlign.right,
         maxLines: 1,
+        color: color,
+        fontWeight: weight,
       );
-      final h = [left.height, right.height, minLineHeight].reduce((a, b) => a > b ? a : b);
+      final h = [left.height, right.height, rowMinH].reduce((a, b) => a > b ? a : b);
       return _MeasuredRow.amount(left, right, h, leftW, gap);
     case ReceiptLineKind.footer:
       final p = _paragraph(
@@ -149,12 +170,15 @@ ui.Paragraph _paragraph(
   double maxWidth,
   ui.TextAlign align, {
   int maxLines = 1,
+  ui.Color color = const ui.Color(0xFF000000),
+  ui.FontWeight fontWeight = ui.FontWeight.w400,
 }) {
   final pb = ui.ParagraphBuilder(
     ui.ParagraphStyle(
       textAlign: align,
       fontFamily: 'monospace',
       fontSize: fontSize,
+      fontWeight: fontWeight,
       height: 1.15,
       maxLines: maxLines,
       ellipsis: maxLines == 1 ? '' : null,
@@ -162,17 +186,29 @@ ui.Paragraph _paragraph(
   )
     ..pushStyle(
       ui.TextStyle(
-        color: const ui.Color(0xFF000000),
+        color: color,
         fontFamily: 'monospace',
         fontSize: fontSize,
+        fontWeight: fontWeight,
       ),
     )
     ..addText(text);
   return pb.build()..layout(ui.ParagraphConstraints(width: maxWidth));
 }
 
-double _measureWidth(String text, double fontSize) {
-  final p = _paragraph(text, fontSize, 10000, ui.TextAlign.left, maxLines: 1);
+double _measureWidth(
+  String text,
+  double fontSize, {
+  ui.FontWeight weight = ui.FontWeight.w400,
+}) {
+  final p = _paragraph(
+    text,
+    fontSize,
+    10000,
+    ui.TextAlign.left,
+    maxLines: 1,
+    fontWeight: weight,
+  );
   return p.maxIntrinsicWidth;
 }
 

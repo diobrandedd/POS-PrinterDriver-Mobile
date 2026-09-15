@@ -72,5 +72,12 @@ void main() {
     expect(changeIdx, greaterThan(cashIdx));
     expect(text.contains('₱400.00'), isTrue);
     expect(text.contains('₱29.00'), isTrue);
+    // Separator lines frame TOTAL + Cash/Change block.
+    final beforeTotal = text.substring(0, totalIdx);
+    expect(beforeTotal.contains('=' * 28), isTrue);
+    final between = text.substring(totalIdx, cashIdx);
+    expect(between.contains('-' * 28), isTrue);
+    final afterChange = text.substring(changeIdx);
+    expect(afterChange.contains('-' * 28), isTrue);
   });
 }

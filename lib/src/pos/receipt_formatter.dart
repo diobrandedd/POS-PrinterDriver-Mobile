@@ -6,18 +6,25 @@ const String kThermalFooter = 'This is not an Official Receipt';
 
 /// One printable receipt row. Amount rows keep label left + price right.
 class ReceiptLine {
-  const ReceiptLine.text(this.left) : right = '', kind = ReceiptLineKind.text;
-  const ReceiptLine.amount(this.left, this.right) : kind = ReceiptLineKind.amount;
-  const ReceiptLine.rule(this.left) : right = '', kind = ReceiptLineKind.rule;
-  const ReceiptLine.blank() : left = '', right = '', kind = ReceiptLineKind.blank;
-  const ReceiptLine.footer(this.left) : right = '', kind = ReceiptLineKind.footer;
+  const ReceiptLine.text(this.left) : right = '', kind = ReceiptLineKind.text, amountStyle = null;
+  const ReceiptLine.amount(
+    this.left,
+    this.right, {
+    this.amountStyle = ReceiptAmountStyle.normal,
+  }) : kind = ReceiptLineKind.amount;
+  const ReceiptLine.rule(this.left) : right = '', kind = ReceiptLineKind.rule, amountStyle = null;
+  const ReceiptLine.blank() : left = '', right = '', kind = ReceiptLineKind.blank, amountStyle = null;
+  const ReceiptLine.footer(this.left) : right = '', kind = ReceiptLineKind.footer, amountStyle = null;
 
   final ReceiptLineKind kind;
   final String left;
   final String right;
+  final ReceiptAmountStyle? amountStyle;
 }
 
 enum ReceiptLineKind { text, amount, rule, blank, footer }
+
+enum ReceiptAmountStyle { normal, emphasis, muted }
 
 List<ReceiptLine> buildSaleReceiptLines(SaleReceipt receipt, {DateTime? printedAt}) {
   final when = printedAt ?? DateTime.now();
@@ -59,10 +66,30 @@ List<ReceiptLine> buildSaleReceiptLines(SaleReceipt receipt, {DateTime? printedA
   }
 
   lines.add(ReceiptLine.rule('=' * kThermalCols));
-  lines.add(ReceiptLine.amount('TOTAL', _peso(receipt.total)));
+  lines.add(
+    ReceiptLine.amount(
+      'TOTAL',
+      _peso(receipt.total),
+      amountStyle: ReceiptAmountStyle.emphasis,
+    ),
+  );
   if (!receipt.isAr && receipt.amountPaid != null) {
-    lines.add(ReceiptLine.amount('Cash', _peso(receipt.amountPaid!)));
-    lines.add(ReceiptLine.amount('Change', _peso(receipt.effectiveChange ?? 0)));
+    lines.add(ReceiptLine.rule('-' * kThermalCols));
+    lines.add(
+      ReceiptLine.amount(
+        'Cash',
+        _peso(receipt.amountPaid!),
+        amountStyle: ReceiptAmountStyle.muted,
+      ),
+    );
+    lines.add(
+      ReceiptLine.amount(
+        'Change',
+        _peso(receipt.effectiveChange ?? 0),
+        amountStyle: ReceiptAmountStyle.muted,
+      ),
+    );
+    lines.add(ReceiptLine.rule('-' * kThermalCols));
   }
   if (receipt.refunded) {
     lines.add(ReceiptLine.text(_center('** REFUNDED **')));
