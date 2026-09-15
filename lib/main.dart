@@ -93,84 +93,121 @@ class _LoginPageState extends State<LoginPage> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(24, 40, 24, 32),
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: PosColors.forestSoft,
-                    borderRadius: BorderRadius.circular(18),
+            child: Form(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 36, 24, 32),
+                children: [
+                  Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.asset(
+                          'assets/pyxfoodpr.png',
+                          width: 56,
+                          height: 56,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Container(
+                            width: 56,
+                            height: 56,
+                            color: PosColors.forestSoft,
+                            child: const Icon(Icons.point_of_sale, color: PosColors.forest),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Pyx POS', style: Theme.of(context).textTheme.headlineMedium),
+                            Text(
+                              'Staff terminal',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  child: const Icon(Icons.point_of_sale, color: PosColors.forest, size: 32),
-                ),
-                const SizedBox(height: 20),
-                Text('Pyx POS', style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 6),
-                Text(
-                  'Sign in with your staff account. Ask an executive to assign you under System Settings → Mobile POS staff.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 28),
-                TextField(
-                  controller: _user,
-                  textInputAction: TextInputAction.next,
-                  autofillHints: const [AutofillHints.username],
-                  decoration: const InputDecoration(
-                    labelText: 'Username',
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pass,
-                  obscureText: _obscure,
-                  textInputAction: TextInputAction.done,
-                  autofillHints: const [AutofillHints.password],
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                      icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                  const SizedBox(height: 28),
+                  PosPanel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Sign in',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Use your assigned staff username and password.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _user,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.username],
+                          decoration: const InputDecoration(
+                            labelText: 'Username',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _pass,
+                          obscureText: _obscure,
+                          textInputAction: TextInputAction.done,
+                          autofillHints: const [AutofillHints.password],
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              tooltip: _obscure ? 'Show password' : 'Hide password',
+                              onPressed: () => setState(() => _obscure = !_obscure),
+                              icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                            ),
+                          ),
+                          onSubmitted: (_) => _busy ? null : _login(),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: () => setState(() => _showApi = !_showApi),
+                            child: Text(_showApi ? 'Hide API settings' : 'API settings'),
+                          ),
+                        ),
+                        if (_showApi) ...[
+                          TextField(
+                            controller: _api,
+                            decoration: const InputDecoration(
+                              labelText: 'API base URL',
+                              helperText: 'Default: https://pyxtracker.pyxfood.com/rts/api/v1',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (_error != null) ...[
+                          PosErrorBanner(message: _error!),
+                          const SizedBox(height: 12),
+                        ],
+                        FilledButton(
+                          onPressed: _busy ? null : _login,
+                          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                          child: _busy
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Text('Enter POS'),
+                        ),
+                      ],
                     ),
                   ),
-                  onSubmitted: (_) => _busy ? null : _login(),
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () => setState(() => _showApi = !_showApi),
-                    child: Text(_showApi ? 'Hide API settings' : 'API settings'),
-                  ),
-                ),
-                if (_showApi) ...[
-                  TextField(
-                    controller: _api,
-                    decoration: const InputDecoration(
-                      labelText: 'API base URL',
-                      helperText: 'Default: https://pyxtracker.pyxfood.com/rts/api/v1',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                 ],
-                if (_error != null) ...[
-                  PosErrorBanner(message: _error!),
-                  const SizedBox(height: 12),
-                ],
-                FilledButton(
-                  onPressed: _busy ? null : _login,
-                  child: _busy
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('Enter POS'),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -220,7 +257,11 @@ class _PosShellState extends State<PosShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      SellPage(onPrinted: () => _snack('Receipt printed')),
+      SellPage(
+        onPrinted: () => _snack('Receipt printed'),
+        printerConnected: _connected,
+        printerLabel: _profile.displayName,
+      ),
       ArPage(onPrinted: () => _snack('AR receipt printed')),
       HistoryPage(onMessage: _snack),
       SettingsPage(
@@ -274,8 +315,15 @@ class _PosShellState extends State<PosShell> {
 }
 
 class SellPage extends StatefulWidget {
-  const SellPage({super.key, required this.onPrinted});
+  const SellPage({
+    super.key,
+    required this.onPrinted,
+    this.printerConnected = false,
+    this.printerLabel,
+  });
   final VoidCallback onPrinted;
+  final bool printerConnected;
+  final String? printerLabel;
 
   @override
   State<SellPage> createState() => _SellPageState();
@@ -395,17 +443,18 @@ class _SellPageState extends State<SellPage> {
     final canCheckout = !_busy && _lines.isNotEmpty && _buyer.text.trim().isNotEmpty;
     return Column(
       children: [
+        PosWorkbenchHeader(
+          title: 'Checkout',
+          staffName: _staffName,
+          printerConnected: widget.printerConnected,
+          printerLabel: widget.printerLabel,
+        ),
+        const Divider(height: 1),
         Expanded(
-          child: PosScrollPage(
-            title: 'Sell',
-            subtitle: 'Scan products, then checkout. Seller: $_staffName',
-            trailing: StaffChip(name: _staffName),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
             children: [
-              FilledButton.icon(
-                onPressed: _busy ? null : _promptAdd,
-                icon: const Icon(Icons.add),
-                label: const Text('Add product'),
-              ),
+              ScanHeroButton(onPressed: _busy ? null : _promptAdd, enabled: !_busy),
               const SizedBox(height: 12),
               TextField(
                 controller: _buyer,
@@ -422,19 +471,34 @@ class _SellPageState extends State<SellPage> {
               ],
               if (_lines.isEmpty)
                 const PosEmptyHint(
-                  icon: Icons.qr_code_scanner,
+                  icon: Icons.shopping_bag_outlined,
                   title: 'Cart is empty',
-                  body: 'Tap Add product to scan or type a barcode.',
+                  body: 'Scan a barcode to start building the sale — like Square checkout.',
                 )
-              else
+              else ...[
+                Row(
+                  children: [
+                    Text('Cart', style: Theme.of(context).textTheme.titleMedium),
+                    const Spacer(),
+                    Text(
+                      '${_lines.length} line${_lines.length == 1 ? '' : 's'}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 PosPanel(
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: [
                       for (var i = 0; i < _lines.length; i++) ...[
                         if (i > 0) const Divider(height: 1),
-                        _CartTile(
-                          line: _lines[i],
+                        CartLineRow(
+                          title: _lines[i].title,
+                          unitPrice: _lines[i].unitPrice,
+                          qty: _lines[i].qty,
+                          lineTotal: _lines[i].lineTotal,
+                          qtyEditable: _lines[i].lookup.requiresQty || _lines[i].lookup.lookupKind == 'sku',
                           onRemove: () => setState(() => _lines.removeAt(i)),
                           onDec: () => setState(() {
                             if (_lines[i].qty > 1) {
@@ -449,12 +513,14 @@ class _SellPageState extends State<SellPage> {
                     ],
                   ),
                 ),
-              const SizedBox(height: 88),
+              ],
+              const SizedBox(height: 72),
             ],
           ),
         ),
         CheckoutBar(
           subtotal: _total,
+          itemCount: _lines.fold<int>(0, (a, b) => a + b.qty),
           enabled: canCheckout,
           busy: _busy,
           onFull: () => _checkout(0),
@@ -462,41 +528,6 @@ class _SellPageState extends State<SellPage> {
           onTwenty: () => _checkout(20),
         ),
       ],
-    );
-  }
-}
-
-class _CartTile extends StatelessWidget {
-  const _CartTile({
-    required this.line,
-    required this.onRemove,
-    required this.onDec,
-    required this.onInc,
-  });
-
-  final CartLine line;
-  final VoidCallback onRemove;
-  final VoidCallback onDec;
-  final VoidCallback onInc;
-
-  @override
-  Widget build(BuildContext context) {
-    final qtyEditable = line.lookup.requiresQty || line.lookup.lookupKind == 'sku';
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      title: Text(line.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: MoneyText(line.unitPrice, style: Theme.of(context).textTheme.bodySmall),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (qtyEditable)
-            IconButton(onPressed: onDec, icon: const Icon(Icons.remove_circle_outline), visualDensity: VisualDensity.compact),
-          Text('${line.qty}', style: const TextStyle(fontWeight: FontWeight.w700)),
-          if (qtyEditable)
-            IconButton(onPressed: onInc, icon: const Icon(Icons.add_circle_outline), visualDensity: VisualDensity.compact),
-          IconButton(onPressed: onRemove, icon: const Icon(Icons.delete_outline), visualDensity: VisualDensity.compact),
-        ],
-      ),
     );
   }
 }
@@ -608,46 +639,59 @@ class _ArPageState extends State<ArPage> {
     final total = _lines.fold(0.0, (a, b) => a + b.lineTotal);
     return PosScrollPage(
       title: 'AR credit',
-      subtitle: 'Record charge to staff or walk-in debtor. Seller: $_staffName',
+      subtitle: 'Charge to staff or walk-in debtor · Seller $_staffName',
       trailing: StaffChip(name: _staffName),
       children: [
-        DropdownMenu<int?>(
-          initialSelection: _selected?.id,
-          label: const Text('Staff debtor'),
-          expandedInsets: EdgeInsets.zero,
-          dropdownMenuEntries: [
-            const DropdownMenuEntry(value: null, label: '— Manual name —'),
-            ..._staff.map((s) => DropdownMenuEntry(
-                  value: s.id,
-                  label: '${s.name}${s.deptName != null ? ' (${s.deptName})' : ''}',
-                )),
-          ],
-          onSelected: (id) => setState(() {
-            if (id == null) {
-              _selected = null;
-            } else {
-              _selected = _staff.firstWhere((s) => s.id == id);
-              _debtor.text = _selected!.name;
-            }
-          }),
+        PosPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DropdownMenu<int?>(
+                initialSelection: _selected?.id,
+                label: const Text('Staff debtor'),
+                expandedInsets: EdgeInsets.zero,
+                dropdownMenuEntries: [
+                  const DropdownMenuEntry(value: null, label: '— Manual name —'),
+                  ..._staff.map((s) => DropdownMenuEntry(
+                        value: s.id,
+                        label: '${s.name}${s.deptName != null ? ' (${s.deptName})' : ''}',
+                      )),
+                ],
+                onSelected: (id) => setState(() {
+                  if (id == null) {
+                    _selected = null;
+                  } else {
+                    _selected = _staff.firstWhere((s) => s.id == id);
+                    _debtor.text = _selected!.name;
+                  }
+                }),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _debtor,
+                decoration: const InputDecoration(
+                  labelText: 'Debtor name',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _mobile,
+                decoration: const InputDecoration(
+                  labelText: 'Mobile (optional)',
+                  prefixIcon: Icon(Icons.phone_outlined),
+                ),
+                keyboardType: TextInputType.phone,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _debtor,
-          decoration: const InputDecoration(labelText: 'Debtor name', prefixIcon: Icon(Icons.badge_outlined)),
-          onChanged: (_) => setState(() {}),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _mobile,
-          decoration: const InputDecoration(labelText: 'Mobile (optional)', prefixIcon: Icon(Icons.phone_outlined)),
-          keyboardType: TextInputType.phone,
-        ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
+        ScanHeroButton(
           onPressed: _busy ? null : _promptAdd,
-          icon: const Icon(Icons.add),
-          label: const Text('Add product'),
+          enabled: !_busy,
+          label: 'Scan / add AR item',
         ),
         const SizedBox(height: 12),
         if (_error != null) ...[
@@ -658,22 +702,33 @@ class _ArPageState extends State<ArPage> {
           const PosEmptyHint(
             icon: Icons.credit_score_outlined,
             title: 'No AR items yet',
-            body: 'Add scanned products, then record the credit.',
+            body: 'Scan products, then record the credit.',
           )
         else
           PosPanel(
             padding: EdgeInsets.zero,
             child: Column(
               children: [
-                for (final l in _lines)
-                  ListTile(
-                    title: Text(l.title),
-                    trailing: MoneyText(l.lineTotal),
+                for (var i = 0; i < _lines.length; i++) ...[
+                  if (i > 0) const Divider(height: 1),
+                  CartLineRow(
+                    title: _lines[i].title,
+                    unitPrice: _lines[i].unitPrice,
+                    qty: _lines[i].qty,
+                    lineTotal: _lines[i].lineTotal,
+                    onRemove: () => setState(() => _lines.removeAt(i)),
                   ),
+                ],
                 const Divider(height: 1),
-                ListTile(
-                  title: const Text('Total', style: TextStyle(fontWeight: FontWeight.w700)),
-                  trailing: MoneyText(total, style: Theme.of(context).textTheme.titleMedium),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: Row(
+                    children: [
+                      Text('Total', style: Theme.of(context).textTheme.titleMedium),
+                      const Spacer(),
+                      MoneyText(total, style: Theme.of(context).textTheme.titleLarge),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -681,8 +736,11 @@ class _ArPageState extends State<ArPage> {
         const SizedBox(height: 16),
         FilledButton(
           onPressed: _busy || _lines.isEmpty || !debtorOk ? null : _checkout,
-          style: FilledButton.styleFrom(backgroundColor: PosColors.gold),
-          child: Text(_busy ? 'Saving…' : 'AR checkout & print'),
+          style: FilledButton.styleFrom(
+            backgroundColor: PosColors.charge,
+            minimumSize: const Size.fromHeight(52),
+          ),
+          child: Text(_busy ? 'Saving…' : 'Record AR & print'),
         ),
       ],
     );
@@ -917,10 +975,11 @@ class _HistoryPageState extends State<HistoryPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('History', style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text('Tap a sale to reprint or refund.', style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 12),
               SegmentedButton<String>(
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
                 segments: const [
                   ButtonSegment(value: 'day', label: Text('Day')),
                   ButtonSegment(value: 'week', label: Text('Week')),
@@ -939,14 +998,18 @@ class _HistoryPageState extends State<HistoryPage> {
                 decoration: InputDecoration(
                   labelText: 'Search receipt',
                   prefixIcon: const Icon(Icons.search),
-                  suffixIcon: IconButton(onPressed: _load, icon: const Icon(Icons.arrow_forward)),
+                  suffixIcon: IconButton(
+                    tooltip: 'Search',
+                    onPressed: _load,
+                    icon: const Icon(Icons.arrow_forward),
+                  ),
                 ),
                 onSubmitted: (_) => _load(),
               ),
             ],
           ),
         ),
-        if (_busy) const LinearProgressIndicator(minHeight: 2),
+        if (_busy) const LinearProgressIndicator(minHeight: 2, color: PosColors.forest),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),

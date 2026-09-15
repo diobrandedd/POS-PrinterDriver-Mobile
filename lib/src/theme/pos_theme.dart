@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-/// Pyx POS visual tokens — restrained Operate palette for shop-floor Android.
+/// Dense Swiss-style POS tokens. Pyx forest brand + emerald charge CTA (Square-like).
 abstract final class PosColors {
   static const forest = Color(0xFF145C45);
   static const forestDeep = Color(0xFF0B3D2E);
-  static const forestSoft = Color(0xFFE6F0EB);
+  static const forestSoft = Color(0xFFE4F0EA);
+  static const charge = Color(0xFF059669);
+  static const chargeDeep = Color(0xFF047857);
   static const gold = Color(0xFFC8900A);
-  static const goldDeep = Color(0xFFA67508);
-  static const ink = Color(0xFF14201C);
-  static const muted = Color(0xFF5A6B63);
-  static const line = Color(0xFFD5DDD8);
-  static const surface = Color(0xFFF3F5F4);
-  static const danger = Color(0xFFB42318);
-  static const dangerSoft = Color(0xFFF8E8E6);
+  static const ink = Color(0xFF0F172A);
+  static const muted = Color(0xFF475569);
+  static const line = Color(0xFFE2E8F0);
+  static const surface = Color(0xFFF8FAFC);
+  static const mutedFill = Color(0xFFF1F5F9);
+  static const danger = Color(0xFFDC2626);
+  static const dangerSoft = Color(0xFFFEE2E2);
 }
 
 ThemeData buildPosTheme() {
@@ -23,11 +26,11 @@ ThemeData buildPosTheme() {
     onPrimary: Colors.white,
     primaryContainer: PosColors.forestSoft,
     onPrimaryContainer: PosColors.forestDeep,
-    secondary: PosColors.gold,
+    secondary: PosColors.charge,
     onSecondary: Colors.white,
-    secondaryContainer: Color(0xFFF7EDD4),
-    onSecondaryContainer: Color(0xFF5C4500),
-    tertiary: PosColors.forestDeep,
+    secondaryContainer: Color(0xFFD1FAE5),
+    onSecondaryContainer: Color(0xFF064E3B),
+    tertiary: PosColors.gold,
     onTertiary: Colors.white,
     error: PosColors.danger,
     onError: Colors.white,
@@ -37,46 +40,77 @@ ThemeData buildPosTheme() {
     onSurface: PosColors.ink,
     onSurfaceVariant: PosColors.muted,
     outline: PosColors.line,
-    outlineVariant: Color(0xFFE4EAE6),
-    shadow: Color(0x3314201C),
-    scrim: Color(0x6614201C),
-    inverseSurface: PosColors.forestDeep,
+    outlineVariant: Color(0xFFEEF2F6),
+    shadow: Color(0x330F172A),
+    scrim: Color(0x660F172A),
+    inverseSurface: PosColors.ink,
     onInverseSurface: Colors.white,
-    inversePrimary: Color(0xFF8BCFB4),
+    inversePrimary: Color(0xFF86EFAC),
     surfaceTint: PosColors.forest,
+  );
+
+  final heading = GoogleFonts.rubikTextTheme();
+  final body = GoogleFonts.nunitoSansTextTheme();
+  final merged = body.copyWith(
+    headlineMedium: heading.headlineMedium?.copyWith(
+      fontSize: 26,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.5,
+      height: 1.15,
+      color: PosColors.ink,
+    ),
+    titleLarge: heading.titleLarge?.copyWith(
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.3,
+      color: PosColors.ink,
+    ),
+    titleMedium: heading.titleMedium?.copyWith(
+      fontSize: 15,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.2,
+      color: PosColors.ink,
+    ),
+    bodyLarge: body.bodyLarge?.copyWith(fontSize: 15, height: 1.35, color: PosColors.ink),
+    bodyMedium: body.bodyMedium?.copyWith(fontSize: 14, height: 1.4, color: PosColors.ink),
+    bodySmall: body.bodySmall?.copyWith(fontSize: 12.5, height: 1.35, color: PosColors.muted),
+    labelLarge: body.labelLarge?.copyWith(fontSize: 14, fontWeight: FontWeight.w700, color: PosColors.ink),
   );
 
   final base = ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: PosColors.surface,
-    splashFactory: InkSparkle.splashFactory,
+    splashFactory: InkRipple.splashFactory,
+    textTheme: merged,
   );
 
   return base.copyWith(
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       centerTitle: false,
       elevation: 0,
-      scrolledUnderElevation: 0.5,
-      backgroundColor: PosColors.surface,
+      scrolledUnderElevation: 0,
+      backgroundColor: Colors.white,
       foregroundColor: PosColors.ink,
-      titleTextStyle: TextStyle(
-        fontSize: 20,
+      surfaceTintColor: Colors.transparent,
+      titleTextStyle: heading.titleLarge?.copyWith(
+        fontSize: 18,
         fontWeight: FontWeight.w700,
-        letterSpacing: -0.3,
         color: PosColors.ink,
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      height: 68,
+      height: 64,
       elevation: 0,
       backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
       indicatorColor: PosColors.forestSoft,
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return TextStyle(
-          fontSize: 12,
-          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          fontSize: 11.5,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
           color: selected ? PosColors.forest : PosColors.muted,
         );
       }),
@@ -91,25 +125,26 @@ ThemeData buildPosTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
+      isDense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: PosColors.line),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: PosColors.line),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: PosColors.forest, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: PosColors.danger),
       ),
-      labelStyle: const TextStyle(color: PosColors.muted, fontWeight: FontWeight.w500),
-      floatingLabelStyle: const TextStyle(color: PosColors.forest, fontWeight: FontWeight.w600),
+      labelStyle: const TextStyle(color: PosColors.muted, fontWeight: FontWeight.w600, fontSize: 13),
+      floatingLabelStyle: const TextStyle(color: PosColors.forest, fontWeight: FontWeight.w700),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
@@ -117,43 +152,49 @@ ThemeData buildPosTheme() {
         foregroundColor: Colors.white,
         disabledBackgroundColor: PosColors.line,
         disabledForegroundColor: PosColors.muted,
-        minimumSize: const Size.fromHeight(48),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: -0.1),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: PosColors.forestDeep,
-        minimumSize: const Size.fromHeight(48),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        foregroundColor: PosColors.ink,
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         side: const BorderSide(color: PosColors.line),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: PosColors.forest,
-        textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        minimumSize: const Size(48, 40),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: PosColors.forestDeep,
-      contentTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+      backgroundColor: PosColors.ink,
+      contentTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
     dividerTheme: const DividerThemeData(color: PosColors.line, thickness: 1, space: 1),
-    listTileTheme: const ListTileThemeData(
-      contentPadding: EdgeInsets.symmetric(horizontal: 4),
-      iconColor: PosColors.muted,
+    cardTheme: CardThemeData(
+      color: Colors.white,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: PosColors.line),
+      ),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      titleTextStyle: const TextStyle(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titleTextStyle: heading.titleLarge?.copyWith(
         fontSize: 18,
         fontWeight: FontWeight.w700,
         color: PosColors.ink,
@@ -161,34 +202,10 @@ ThemeData buildPosTheme() {
     ),
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-    ),
-    textTheme: base.textTheme.copyWith(
-      headlineMedium: const TextStyle(
-        fontSize: 28,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.6,
-        height: 1.15,
-        color: PosColors.ink,
-      ),
-      titleLarge: const TextStyle(
-        fontSize: 20,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -0.3,
-        color: PosColors.ink,
-      ),
-      titleMedium: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -0.2,
-        color: PosColors.ink,
-      ),
-      bodyLarge: const TextStyle(fontSize: 16, height: 1.35, color: PosColors.ink),
-      bodyMedium: const TextStyle(fontSize: 14, height: 1.4, color: PosColors.ink),
-      bodySmall: const TextStyle(fontSize: 12.5, height: 1.35, color: PosColors.muted),
-      labelLarge: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: PosColors.ink),
     ),
   );
 }
