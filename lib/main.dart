@@ -472,8 +472,13 @@ class _SellPageState extends State<SellPage> {
         items: items,
         discountPercent: discountPercent,
       );
+      final change = amountPaid - receipt.total;
+      final printable = receipt.copyWith(
+        amountPaid: amountPaid,
+        changeGiven: change < 0 ? 0 : change,
+      );
       try {
-        await printReceipt(receipt);
+        await printReceipt(printable);
         widget.onPrinted();
       } catch (e) {
         if (mounted) {
@@ -488,7 +493,6 @@ class _SellPageState extends State<SellPage> {
       });
       if (mounted) {
         final deduct = receipt.total;
-        final change = amountPaid - deduct;
         // Open cashbox when showing change (best-effort).
         try {
           await PrintBridge.instance.openCashDrawer();
@@ -887,6 +891,10 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _refund(SaleReceipt row) async {
+    if (RtsClient.instance.user?.canRefund != true) {
+      widget.onMessage('Only executive accounts can refund sales.');
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -921,6 +929,8 @@ class _HistoryPageState extends State<HistoryPage> {
       detail = await RtsClient.instance.receiptGet(row.saleId);
     } catch (_) {}
     if (!mounted) return;
+
+    final canRefund = RtsClient.instance.user?.canRefund == true;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -996,14 +1006,16 @@ class _HistoryPageState extends State<HistoryPage> {
                           label: const Text('Reprint'),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: detail.refunded ? null : () => _refund(detail),
-                          icon: const Icon(Icons.undo),
-                          label: Text(detail.refunded ? 'Refunded' : 'Refund'),
+                      if (canRefund) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: detail.refunded ? null : () => _refund(detail),
+                            icon: const Icon(Icons.undo),
+                            label: Text(detail.refunded ? 'Refunded' : 'Refund'),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ],
@@ -1054,7 +1066,12 @@ class _HistoryPageState extends State<HistoryPage> {
             children: [
               Text('History', style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 2),
-              Text('Tap a sale to reprint or refund.', style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                RtsClient.instance.user?.canRefund == true
+                    ? 'Tap a sale to reprint or refund.'
+                    : 'Tap a sale to reprint.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               const SizedBox(height: 12),
               SegmentedButton<String>(
                 style: const ButtonStyle(visualDensity: VisualDensity.compact),
@@ -1100,11 +1117,13 @@ class _HistoryPageState extends State<HistoryPage> {
                 ? ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
-                    children: const [
+                    children: [
                       PosEmptyHint(
                         icon: Icons.receipt_long_outlined,
                         title: 'No sales in this period',
-                        body: 'Completed checkouts will show up here for reprint and refund.',
+                        body: RtsClient.instance.user?.canRefund == true
+                            ? 'Completed checkouts will show up here for reprint and refund.'
+                            : 'Completed checkouts will show up here for reprint.',
                       ),
                     ],
                   )

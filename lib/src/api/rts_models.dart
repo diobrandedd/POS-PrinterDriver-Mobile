@@ -12,6 +12,14 @@ class PosUser {
   final String name;
   final String role;
 
+  /// Full-sale refund is executive-only; all POS roles may reprint.
+  bool get isExecutive {
+    final r = role.trim().toLowerCase();
+    return r == 'executive' || r == 'exec';
+  }
+
+  bool get canRefund => isExecutive;
+
   factory PosUser.fromMap(Map<dynamic, dynamic>? map) {
     return PosUser(
       name: map?['name'] as String? ?? 'POS',
@@ -144,6 +152,8 @@ class SaleReceipt {
     this.debtorMobile,
     this.soldAt,
     this.refunded = false,
+    this.amountPaid,
+    this.changeGiven,
   });
 
   final int saleId;
@@ -160,8 +170,61 @@ class SaleReceipt {
   final String? soldAt;
   final bool refunded;
 
+  /// Cash tendered at checkout (client-side; used for receipt Cash/Change lines).
+  final double? amountPaid;
+
+  /// Change returned (defaults to amountPaid − total when omitted).
+  final double? changeGiven;
+
+  double? get effectiveChange {
+    if (changeGiven != null) return changeGiven;
+    if (amountPaid == null) return null;
+    final c = amountPaid! - total;
+    return c < 0 ? 0 : c;
+  }
+
+  SaleReceipt copyWith({
+    int? saleId,
+    String? receiptNo,
+    double? total,
+    String? buyerName,
+    String? sellerName,
+    List<SaleReceiptItem>? items,
+    double? subtotal,
+    int? discountPercent,
+    double? discountAmount,
+    bool? isAr,
+    String? debtorMobile,
+    String? soldAt,
+    bool? refunded,
+    double? amountPaid,
+    double? changeGiven,
+  }) {
+    return SaleReceipt(
+      saleId: saleId ?? this.saleId,
+      receiptNo: receiptNo ?? this.receiptNo,
+      total: total ?? this.total,
+      buyerName: buyerName ?? this.buyerName,
+      sellerName: sellerName ?? this.sellerName,
+      items: items ?? this.items,
+      subtotal: subtotal ?? this.subtotal,
+      discountPercent: discountPercent ?? this.discountPercent,
+      discountAmount: discountAmount ?? this.discountAmount,
+      isAr: isAr ?? this.isAr,
+      debtorMobile: debtorMobile ?? this.debtorMobile,
+      soldAt: soldAt ?? this.soldAt,
+      refunded: refunded ?? this.refunded,
+      amountPaid: amountPaid ?? this.amountPaid,
+      changeGiven: changeGiven ?? this.changeGiven,
+    );
+  }
+
   factory SaleReceipt.fromCheckout(Map<dynamic, dynamic> map) {
     final itemsRaw = (map['items'] as List?) ?? const [];
+    final amountPaid = (map['amount_paid'] as num?)?.toDouble() ??
+        (map['cash_tendered'] as num?)?.toDouble();
+    final changeGiven = (map['change'] as num?)?.toDouble() ??
+        (map['change_given'] as num?)?.toDouble();
     return SaleReceipt(
       saleId: (map['sale_id'] as num?)?.toInt() ?? 0,
       receiptNo: map['receipt_no'] as String? ?? '',
@@ -175,6 +238,8 @@ class SaleReceipt {
       debtorMobile: map['debtor_mobile'] as String?,
       soldAt: map['sold_at'] as String?,
       refunded: map['refunded'] == true,
+      amountPaid: amountPaid,
+      changeGiven: changeGiven,
       items: itemsRaw
           .map((e) => SaleReceiptItem.fromMap(Map<dynamic, dynamic>.from(e as Map)))
           .toList(),
@@ -183,6 +248,10 @@ class SaleReceipt {
 
   factory SaleReceipt.fromHistoryRow(Map<dynamic, dynamic> map) {
     final itemsRaw = (map['items'] as List?) ?? const [];
+    final amountPaid = (map['amount_paid'] as num?)?.toDouble() ??
+        (map['cash_tendered'] as num?)?.toDouble();
+    final changeGiven = (map['change'] as num?)?.toDouble() ??
+        (map['change_given'] as num?)?.toDouble();
     return SaleReceipt(
       saleId: (map['sale_id'] as num?)?.toInt() ?? 0,
       receiptNo: map['receipt_no'] as String? ?? '',
@@ -195,6 +264,8 @@ class SaleReceipt {
       isAr: map['is_ar'] == true,
       soldAt: map['sold_at'] as String?,
       refunded: map['refunded'] == true,
+      amountPaid: amountPaid,
+      changeGiven: changeGiven,
       items: itemsRaw
           .map((e) => SaleReceiptItem.fromMap(Map<dynamic, dynamic>.from(e as Map)))
           .toList(),

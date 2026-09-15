@@ -60,6 +60,10 @@ List<ReceiptLine> buildSaleReceiptLines(SaleReceipt receipt, {DateTime? printedA
 
   lines.add(ReceiptLine.rule('=' * kThermalCols));
   lines.add(ReceiptLine.amount('TOTAL', _peso(receipt.total)));
+  if (!receipt.isAr && receipt.amountPaid != null) {
+    lines.add(ReceiptLine.amount('Cash', _peso(receipt.amountPaid!)));
+    lines.add(ReceiptLine.amount('Change', _peso(receipt.effectiveChange ?? 0)));
+  }
   if (receipt.refunded) {
     lines.add(ReceiptLine.text(_center('** REFUNDED **')));
   }

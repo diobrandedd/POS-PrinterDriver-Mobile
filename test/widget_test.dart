@@ -41,4 +41,36 @@ void main() {
     expect(text.contains('₱400.00'), isTrue);
     expect(text.contains('Thank you'), isFalse);
   });
+
+  test('receipt shows Cash and Change below TOTAL', () {
+    final text = formatSaleReceiptText(
+      SaleReceipt(
+        saleId: 1,
+        receiptNo: 'RCP-TEST',
+        total: 371,
+        buyerName: 'Walk-in',
+        sellerName: 'Staff',
+        amountPaid: 400,
+        changeGiven: 29,
+        items: [
+          SaleReceiptItem(
+            name: 'Honey',
+            qty: 1,
+            unitPrice: 371,
+            lineTotal: 371,
+          ),
+        ],
+      ),
+      printedAt: DateTime(2026, 9, 15, 14, 0, 0),
+    );
+
+    final totalIdx = text.indexOf('TOTAL');
+    final cashIdx = text.indexOf('Cash');
+    final changeIdx = text.indexOf('Change');
+    expect(totalIdx, greaterThanOrEqualTo(0));
+    expect(cashIdx, greaterThan(totalIdx));
+    expect(changeIdx, greaterThan(cashIdx));
+    expect(text.contains('₱400.00'), isTrue);
+    expect(text.contains('₱29.00'), isTrue);
+  });
 }
