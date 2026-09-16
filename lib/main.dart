@@ -11,9 +11,6 @@ import 'package:thermal_print/src/print_bridge.dart';
 import 'package:thermal_print/src/theme/pos_theme.dart';
 import 'package:thermal_print/src/ui/pos_chrome.dart';
 
-/// Auto-return to login after this much idle time (security).
-const Duration kPosIdleLockTimeout = Duration(seconds: 30);
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RtsClient.instance.init();
@@ -268,7 +265,7 @@ class _PosShellState extends State<PosShell> with WidgetsBindingObserver {
   void _armIdleTimer() {
     _idleTimer?.cancel();
     if (_locking) return;
-    _idleTimer = Timer(kPosIdleLockTimeout, () {
+    _idleTimer = Timer(RtsClient.instance.idleLockTimeout, () {
       unawaited(_lockSession());
     });
   }
@@ -324,6 +321,7 @@ class _PosShellState extends State<PosShell> with WidgetsBindingObserver {
           await PrintBridge.instance.saveProfile(p);
           _snack('Printer settings saved');
         },
+        onIdleLockChanged: _armIdleTimer,
         onLogout: _logout,
       ),
     ];
@@ -1418,6 +1416,7 @@ class SettingsPage extends StatefulWidget {
     required this.onRefreshPrinter,
     required this.onSavePaper,
     required this.onLogout,
+    this.onIdleLockChanged,
   });
 
   final PrinterProfile profile;
@@ -1426,6 +1425,7 @@ class SettingsPage extends StatefulWidget {
   final Future<void> Function() onRefreshPrinter;
   final ValueChanged<PrinterProfile> onSavePaper;
   final VoidCallback onLogout;
+  final VoidCallback? onIdleLockChanged;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -1435,6 +1435,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late int _width = widget.profile.paperWidthMm;
   late String _graphics = widget.profile.graphicsCommand;
   late bool _autoCut = widget.profile.autoCut;
+  late int _idleLockSeconds = RtsClient.instance.idleLockSeconds;
   final _api = TextEditingController(text: RtsClient.instance.baseUrl);
 
   @override
@@ -1451,6 +1452,21 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _api.dispose();
     super.dispose();
+  }
+
+  String _idleLabel(int seconds) {
+    switch (seconds) {
+      case 30:
+        return '30s';
+      case 60:
+        return '1m';
+      case 300:
+        return '5m';
+      case 600:
+        return '10m';
+      default:
+        return '${seconds}s';
+    }
   }
 
   @override
@@ -1482,6 +1498,43 @@ class _SettingsPageState extends State<SettingsPage> {
                     );
                   },
                   child: const Text('Save API'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        PosSection(
+          title: 'Security',
+          subtitle: 'Auto-lock returns to login after idle time',
+          child: PosPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Idle lock', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  'Locks the POS after no taps or key presses.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 10),
+                SegmentedButton<int>(
+                  style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                  segments: [
+                    for (final s in RtsClient.idleLockOptionsSeconds)
+                      ButtonSegment(value: s, label: Text(_idleLabel(s))),
+                  ],
+                  selected: {_idleLockSeconds},
+                  onSelectionChanged: (set) async {
+                    final seconds = set.first;
+                    setState(() => _idleLockSeconds = seconds);
+                    await RtsClient.instance.setIdleLockSeconds(seconds);
+                    widget.onIdleLockChanged?.call();
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(content: Text('Idle lock set to ${_idleLabel(seconds)}')),
+                    );
+                  },
                 ),
               ],
             ),

@@ -13,21 +13,41 @@ class RtsClient {
   static const _tokenKey = 'rts_bearer_token';
   static const _baseKey = 'rts_api_base';
   static const _sellerKey = 'rts_default_seller';
+  static const _idleLockKey = 'pos_idle_lock_seconds';
+  static const idleLockOptionsSeconds = [30, 60, 300, 600];
+  static const defaultIdleLockSeconds = 30;
 
   final _storage = const FlutterSecureStorage();
   String? _token;
   String _baseUrl = _defaultBase;
   PosUser? user;
+  int _idleLockSeconds = defaultIdleLockSeconds;
 
   String get baseUrl => _baseUrl;
   bool get isLoggedIn => _token != null && _token!.isNotEmpty;
+  int get idleLockSeconds => _idleLockSeconds;
+  Duration get idleLockTimeout => Duration(seconds: _idleLockSeconds);
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _baseUrl = prefs.getString(_baseKey) ?? _defaultBase;
+    _idleLockSeconds = _normalizeIdleLockSeconds(
+      prefs.getInt(_idleLockKey) ?? defaultIdleLockSeconds,
+    );
     // Shared POS terminal: always require staff sign-in on cold start
     // (do not restore a previous Bearer session).
     await logout(remote: false);
+  }
+
+  static int _normalizeIdleLockSeconds(int seconds) {
+    if (idleLockOptionsSeconds.contains(seconds)) return seconds;
+    return defaultIdleLockSeconds;
+  }
+
+  Future<void> setIdleLockSeconds(int seconds) async {
+    _idleLockSeconds = _normalizeIdleLockSeconds(seconds);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_idleLockKey, _idleLockSeconds);
   }
 
   Future<void> setBaseUrl(String url) async {
