@@ -63,6 +63,44 @@ class LookupItem {
   final String? code;
   final String? pool;
 
+  bool get isRtsSellable => pool == 'rts_sellable';
+
+  LookupItem copyWith({
+    String? kind,
+    String? lookupKind,
+    String? label,
+    int? productId,
+    String? productName,
+    double? suggestedPrice,
+    bool? requiresQty,
+    String? variant,
+    String? size,
+    String? sizeLabel,
+    String? productKey,
+    int? unitId,
+    int? skuId,
+    String? code,
+    String? pool,
+  }) {
+    return LookupItem(
+      kind: kind ?? this.kind,
+      lookupKind: lookupKind ?? this.lookupKind,
+      label: label ?? this.label,
+      productId: productId ?? this.productId,
+      productName: productName ?? this.productName,
+      suggestedPrice: suggestedPrice ?? this.suggestedPrice,
+      requiresQty: requiresQty ?? this.requiresQty,
+      variant: variant ?? this.variant,
+      size: size ?? this.size,
+      sizeLabel: sizeLabel ?? this.sizeLabel,
+      productKey: productKey ?? this.productKey,
+      unitId: unitId ?? this.unitId,
+      skuId: skuId ?? this.skuId,
+      code: code ?? this.code,
+      pool: pool ?? this.pool,
+    );
+  }
+
   factory LookupItem.fromMap(Map<dynamic, dynamic> map) {
     return LookupItem(
       kind: map['kind'] as String? ?? 'honey',
@@ -122,6 +160,7 @@ class CartLine {
 
   double get lineTotal => double.parse((unitPrice * qty).toStringAsFixed(2));
   String get title => lookup.label;
+  bool get isRtsSellable => lookup.isRtsSellable;
 }
 
 class StaffMember {

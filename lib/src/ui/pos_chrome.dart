@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:thermal_print/src/theme/pos_theme.dart';
 
 class PosScrollPage extends StatelessWidget {
@@ -58,12 +59,14 @@ class PosWorkbenchHeader extends StatelessWidget {
     required this.staffName,
     this.printerConnected = false,
     this.printerLabel,
+    this.trailingAction,
   });
 
   final String title;
   final String staffName;
   final bool printerConnected;
   final String? printerLabel;
+  final Widget? trailingAction;
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +85,10 @@ class PosWorkbenchHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (trailingAction != null) ...[
+            trailingAction!,
+            const SizedBox(width: 8),
+          ],
           StatusPill(
             label: printerConnected
                 ? (printerLabel?.isNotEmpty == true ? 'Printer' : 'Printer on')
@@ -372,6 +379,8 @@ class CartLineRow extends StatelessWidget {
     this.qtyEditable = false,
     this.onDec,
     this.onInc,
+    this.onQtyChanged,
+    this.isRts = false,
   });
 
   final String title;
@@ -382,6 +391,8 @@ class CartLineRow extends StatelessWidget {
   final bool qtyEditable;
   final VoidCallback? onDec;
   final VoidCallback? onInc;
+  final ValueChanged<int>? onQtyChanged;
+  final bool isRts;
 
   @override
   Widget build(BuildContext context) {
@@ -394,7 +405,34 @@ class CartLineRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
+                      ),
+                    ),
+                    if (isRts) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: PosColors.dangerSoft,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'RTS',
+                          style: TextStyle(
+                            color: PosColors.danger,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 2),
                 Text(
                   '₱${unitPrice.toStringAsFixed(2)} each',
@@ -410,12 +448,41 @@ class CartLineRow extends StatelessWidget {
                         semanticLabel: 'Decrease quantity',
                       ),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Text(
-                          '$qty',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontFeatures: [FontFeature.tabularFigures()],
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Semantics(
+                          button: true,
+                          label: 'Edit quantity, currently $qty',
+                          child: Material(
+                            color: PosColors.mutedFill,
+                            borderRadius: BorderRadius.circular(10),
+                            child: InkWell(
+                              onTap: onQtyChanged == null
+                                  ? null
+                                  : () async {
+                                      final next = await promptQuantity(
+                                        context,
+                                        initialQty: qty,
+                                        productTitle: title,
+                                      );
+                                      if (next != null) onQtyChanged!(next);
+                                    },
+                              borderRadius: BorderRadius.circular(10),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(minWidth: 48, minHeight: 40),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  child: Center(
+                                    child: Text(
+                                      '$qty',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontFeatures: [FontFeature.tabularFigures()],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -455,6 +522,88 @@ class CartLineRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Digits-only quantity entry. Returns null if cancelled; min 1, max 99999.
+Future<int?> promptQuantity(
+  BuildContext context, {
+  required int initialQty,
+  String? productTitle,
+}) async {
+  final controller = TextEditingController(text: initialQty > 0 ? '$initialQty' : '');
+  controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+  final result = await showModalBottomSheet<int>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) {
+      final bottom = MediaQuery.of(ctx).viewInsets.bottom;
+      return Padding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Quantity', style: Theme.of(ctx).textTheme.titleLarge),
+            if (productTitle != null && productTitle.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(productTitle, style: Theme.of(ctx).textTheme.bodySmall),
+            ],
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(5),
+              ],
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'Enter quantity',
+                helperText: '1 – 99999',
+                prefixIcon: Icon(Icons.pin_outlined),
+              ),
+              onSubmitted: (v) {
+                final n = int.tryParse(v.trim());
+                if (n != null && n >= 1 && n <= 99999) {
+                  Navigator.pop(ctx, n);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () {
+                      final n = int.tryParse(controller.text.trim());
+                      if (n == null || n < 1 || n > 99999) return;
+                      Navigator.pop(ctx, n);
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: PosColors.charge,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Set'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    },
+  );
+  controller.dispose();
+  return result;
 }
 
 class CheckoutBar extends StatelessWidget {
@@ -784,6 +933,73 @@ class _ChangeRow extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Executive employee ID step-up. Returns the ID if confirmed; null if cancelled.
+Future<String?> promptExecutiveId(BuildContext context) async {
+  final controller = TextEditingController();
+  final result = await showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) {
+      final bottom = MediaQuery.of(ctx).viewInsets.bottom;
+      return Padding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Authorize RTS sale', style: Theme.of(ctx).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              'Enter an executive employee ID to sell from RTS resellable inventory.',
+              style: Theme.of(ctx).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'Executive employee ID',
+                prefixIcon: Icon(Icons.lock_outline),
+              ),
+              onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: PosColors.danger,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Authorize'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    },
+  );
+  controller.dispose();
+  if (result == null || result.isEmpty) return null;
+  return result;
 }
 
 Future<String?> promptProductCode(BuildContext context, {String title = 'Scan product'}) async {

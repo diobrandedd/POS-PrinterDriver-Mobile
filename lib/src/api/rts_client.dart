@@ -123,6 +123,33 @@ class RtsClient {
     await _storage.delete(key: _tokenKey);
   }
 
+  /// Step-up: verify an executive employee ID without replacing the POS session.
+  Future<({String name, String employeeId})> verifyExecutive(String employeeId) async {
+    final id = employeeId.trim();
+    if (id.isEmpty) {
+      throw RtsException('Executive employee ID is required.');
+    }
+    final data = await _request(
+      'POST',
+      'auth.php',
+      action: 'verify_executive',
+      body: {'pin': id, 'password': id, 'employee_id': id},
+    );
+    if (data['ok'] != true) {
+      throw RtsException('Executive authorization failed.');
+    }
+    final exec = data['executive'];
+    if (exec is! Map) {
+      throw RtsException('Executive authorization failed.');
+    }
+    return (
+      name: (exec['name'] as String?)?.trim().isNotEmpty == true
+          ? (exec['name'] as String).trim()
+          : 'Executive',
+      employeeId: (exec['employee_id'] as String?)?.trim() ?? id,
+    );
+  }
+
   Future<LookupItem> unifiedLookup(String code) async {
     final data = await _request(
       'GET',

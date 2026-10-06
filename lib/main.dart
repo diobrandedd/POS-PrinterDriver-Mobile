@@ -410,13 +410,43 @@ class _SellPageState extends State<SellPage> {
     await _addCode(code);
   }
 
-  Future<void> _addCode(String code) async {
+  Future<void> _promptAddRts() async {
+    final execId = await promptExecutiveId(context);
+    if (execId == null || !mounted) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final item = await RtsClient.instance.unifiedLookup(code);
+      final exec = await RtsClient.instance.verifyExecutive(execId);
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('RTS authorized by ${exec.name}')),
+      );
+      final code = await promptProductCode(
+        context,
+        title: 'Scan RTS product',
+      );
+      if (code == null || !mounted) return;
+      await _addCode(code, forceRtsPool: true);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _addCode(String code, {bool forceRtsPool = false}) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      var item = await RtsClient.instance.unifiedLookup(code);
+      if (forceRtsPool) {
+        item = item.copyWith(pool: 'rts_sellable');
+      }
       if (item.lookupKind == 'unique_honey' || item.lookupKind == 'unique_dept') {
         final exists = _lines.any((l) => l.lookup.unitId != null && l.lookup.unitId == item.unitId);
         if (exists) throw RtsException('That unit is already in the cart.');
@@ -425,7 +455,8 @@ class _SellPageState extends State<SellPage> {
         final idx = _lines.indexWhere((l) =>
             l.lookup.productId == item.productId &&
             l.lookup.lookupKind == item.lookupKind &&
-            l.lookup.code == item.code);
+            l.lookup.code == item.code &&
+            l.lookup.pool == item.pool);
         if (idx >= 0) {
           _lines[idx].qty += 1;
         } else {
@@ -530,6 +561,20 @@ class _SellPageState extends State<SellPage> {
           staffName: _staffName,
           printerConnected: widget.printerConnected,
           printerLabel: widget.printerLabel,
+          trailingAction: Semantics(
+            button: true,
+            label: 'Sell RTS',
+            child: IconButton(
+              onPressed: _busy ? null : _promptAddRts,
+              tooltip: 'Sell RTS',
+              style: IconButton.styleFrom(
+                backgroundColor: PosColors.dangerSoft,
+                foregroundColor: PosColors.danger,
+                disabledBackgroundColor: PosColors.line,
+              ),
+              icon: const Icon(Icons.storefront_outlined),
+            ),
+          ),
         ),
         const Divider(height: 1),
         Expanded(
@@ -580,6 +625,7 @@ class _SellPageState extends State<SellPage> {
                           unitPrice: _lines[i].unitPrice,
                           qty: _lines[i].qty,
                           lineTotal: _lines[i].lineTotal,
+                          isRts: _lines[i].isRtsSellable,
                           qtyEditable: _lines[i].lookup.requiresQty || _lines[i].lookup.lookupKind == 'sku',
                           onRemove: () => setState(() => _lines.removeAt(i)),
                           onDec: () => setState(() {
@@ -590,6 +636,7 @@ class _SellPageState extends State<SellPage> {
                             }
                           }),
                           onInc: () => setState(() => _lines[i].qty += 1),
+                          onQtyChanged: (n) => setState(() => _lines[i].qty = n),
                         ),
                       ],
                     ],
