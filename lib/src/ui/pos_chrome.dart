@@ -85,16 +85,16 @@ class PosWorkbenchHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (trailingAction != null) ...[
-            trailingAction!,
-            const SizedBox(width: 8),
-          ],
           StatusPill(
             label: printerConnected
                 ? (printerLabel?.isNotEmpty == true ? 'Printer' : 'Printer on')
                 : 'No printer',
             ok: printerConnected,
           ),
+          if (trailingAction != null) ...[
+            const SizedBox(width: 8),
+            trailingAction!,
+          ],
         ],
       ),
     );

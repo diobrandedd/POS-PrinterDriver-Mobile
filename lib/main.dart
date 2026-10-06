@@ -561,18 +561,20 @@ class _SellPageState extends State<SellPage> {
           staffName: _staffName,
           printerConnected: widget.printerConnected,
           printerLabel: widget.printerLabel,
-          trailingAction: Semantics(
-            button: true,
-            label: 'Sell RTS',
-            child: IconButton(
-              onPressed: _busy ? null : _promptAddRts,
-              tooltip: 'Sell RTS',
-              style: IconButton.styleFrom(
-                backgroundColor: PosColors.dangerSoft,
-                foregroundColor: PosColors.danger,
-                disabledBackgroundColor: PosColors.line,
-              ),
-              icon: const Icon(Icons.storefront_outlined),
+          trailingAction: FilledButton.icon(
+            onPressed: _busy ? null : _promptAddRts,
+            style: FilledButton.styleFrom(
+              backgroundColor: PosColors.danger,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: PosColors.line,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              minimumSize: const Size(0, 40),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: const Icon(Icons.storefront, size: 18),
+            label: const Text(
+              'RTS',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
             ),
           ),
         ),
